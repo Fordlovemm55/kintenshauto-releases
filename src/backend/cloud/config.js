@@ -1,10 +1,16 @@
-// Cloud configuration — reads Supabase URL + anon key from env or .env file.
-// Returns { supabaseUrl, supabaseAnonKey, isConfigured } so callers can decide
-// whether to attempt cloud operations. When values are missing the app stays in
-// local-only/dev mode and never reaches out to Supabase.
+// Cloud configuration — reads Supabase URL + anon key from env or .env file,
+// falling back to embedded defaults so packaged installers work without an
+// adjacent .env file. Returns { supabaseUrl, supabaseAnonKey, isConfigured }
+// so callers can decide whether to attempt cloud operations.
 
 const fs = require('fs');
 const path = require('path');
+
+// Embedded production defaults. The anon (publishable) key is safe to ship in
+// the client bundle — RLS policies enforce access. Override via env or .env
+// for dev/staging. service_role MUST NEVER be embedded here — it bypasses RLS.
+const DEFAULT_SUPABASE_URL = 'https://etutmagymtlfagcsvavk.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_zlRdIib67v6B8cml000r2g_t8Ne-K_0';
 
 let _envLoaded = false;
 
@@ -57,8 +63,13 @@ function loadEnvFile() {
 function getCloudConfig() {
   loadEnvFile();
 
-  const supabaseUrl = process.env.KINTENSHAUTO_SUPABASE_URL || null;
-  const supabaseAnonKey = process.env.KINTENSHAUTO_SUPABASE_ANON_KEY || null;
+  // In test mode, never fall back to embedded defaults — tests assert on
+  // "missing" behavior. Production always resolves to a configured client.
+  const inTest = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
+  const supabaseUrl = process.env.KINTENSHAUTO_SUPABASE_URL
+    || (inTest ? null : DEFAULT_SUPABASE_URL);
+  const supabaseAnonKey = process.env.KINTENSHAUTO_SUPABASE_ANON_KEY
+    || (inTest ? null : DEFAULT_SUPABASE_ANON_KEY);
 
   if (supabaseUrl) {
     try {

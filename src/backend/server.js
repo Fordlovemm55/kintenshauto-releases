@@ -194,6 +194,10 @@ applyMigrations(db, [
     { table: 'caption_prompts', column: 'selected_model', definition: 'TEXT' },
     { table: 'profiles',       column: 'platform', definition: "TEXT NOT NULL DEFAULT 'facebook'" },
     { table: 'profiles',       column: 'account_handle', definition: 'TEXT' },
+    // Per-page posting schedule — daily_quota already exists. post_times is a
+    // JSON array of "HH:MM" strings. The scheduler uses these slots in order;
+    // when full for today, rolls over to next day.
+    { table: 'pages',          column: 'post_times', definition: 'TEXT' },
     // Plan 2: sync columns for cloud bidirectional sync.
     // NOTE: SQLite's ALTER TABLE ADD COLUMN cannot add UNIQUE constraints or
     // non-constant defaults (CURRENT_TIMESTAMP). We add plain TEXT/DATETIME
@@ -478,7 +482,8 @@ function notFound(msg)   { const e = new Error(msg); e.status = 404; e.code = 'N
 // HEALTH + STATS
 // ====================================================================
 app.get('/api/health', (req, res) => {
-    res.json({ ok: true, version: '1.0.0', db: dbExists ? 'existing' : 'fresh', time: new Date().toISOString() });
+    const pkg = require('../../package.json');
+    res.json({ ok: true, version: pkg.version, db: dbExists ? 'existing' : 'fresh', time: new Date().toISOString() });
 });
 
 app.get('/api/stats/daily', asyncHandler(async (req, res) => {
@@ -540,9 +545,10 @@ app.post('/api/auth/login', asyncHandler(async (req, res) => {
         (reason) => console.warn('[deviceGuard] heartbeat issue:', reason)
     );
 
-    // Subscribe to kick signal — when another device claims us, log out + notify React
-    subscribeKick(result.user.id, result.session.access_token, async () => {
-        console.warn('[deviceGuard] received kick signal — closing browsers + logging out');
+    // Subscribe to kick signal — fires when another device takes the slot OR
+    // admin force-logs this device out (deletes the user_devices row).
+    subscribeKick(result.user.id, result.session.access_token, claim.session_token, async (reason) => {
+        console.warn('[deviceGuard] received kick signal:', reason, '— closing browsers + logging out');
         try {
             const browserManager = require('./core/browserManager');
             await browserManager.closeAll();
@@ -553,7 +559,7 @@ app.post('/api/auth/login', asyncHandler(async (req, res) => {
         stopHeartbeat();
         unsubscribeKick();
         await authService.logout();
-        try { io.emit('auth:kicked', { reason: 'another_device_signed_in' }); } catch {}
+        try { io.emit('auth:kicked', { reason: reason || 'another_device_signed_in' }); } catch {}
     });
 
     // Plan 2 Task 12: initial pull from cloud (LWW merge into local)
@@ -600,15 +606,14 @@ app.post('/api/auth/refresh', asyncHandler(async (req, res) => {
     res.json({ ok: true });
 }));
 
-// Plan 2 Task 13: cloud version check
+// Plan 2 Task 13: cloud version check. Runs unauthenticated too — the desktop
+// app polls this on startup BEFORE login, so users see force-update prompts
+// without having to authenticate (otherwise a force-update could lock them out).
 app.get('/api/version/check', asyncHandler(async (req, res) => {
     const session = authService.getStoredSession();
-    if (!session?.access_token) {
-        return res.json({ ok: true, force_update: null, soft_update: null, reason: 'no_session' });
-    }
     const { checkVersion } = require('./cloud/updateChecker');
     const pkg = require('../../package.json');
-    const result = await checkVersion(session.access_token, pkg.version);
+    const result = await checkVersion(session?.access_token || null, pkg.version);
     res.json(result);
 }));
 
@@ -1015,10 +1020,25 @@ app.post('/api/pages/bulk-delete', asyncHandler(async (req, res) => {
 
 app.put('/api/pages/:id', asyncHandler(async (req, res) => {
     const allowed = ['name', 'daily_quota', 'cooldown_min', 'niche', 'enabled', 'avatar_url',
-                     'posts_per_session', 'session_interval_hours', 'default_keyword'];
+                     'posts_per_session', 'session_interval_hours', 'default_keyword', 'post_times'];
     const updates = [];
     const values = [];
-    for (const k of allowed) if (k in req.body) { updates.push(`${k} = ?`); values.push(req.body[k]); }
+    for (const k of allowed) {
+        if (!(k in req.body)) continue;
+        let v = req.body[k];
+        // post_times accepts an array → stored as JSON string. Validate each entry is "HH:MM".
+        if (k === 'post_times') {
+            if (Array.isArray(v)) {
+                const re = /^([01]\d|2[0-3]):[0-5]\d$/;
+                v = v.filter(t => typeof t === 'string' && re.test(t)).slice(0, 24);
+                v = JSON.stringify(v);
+            } else if (typeof v !== 'string') {
+                continue;
+            }
+        }
+        updates.push(`${k} = ?`);
+        values.push(v);
+    }
     if (!updates.length) return res.json({ ok: true });
     values.push(req.params.id);
     db.prepare(`UPDATE pages SET ${updates.join(', ')} WHERE id = ?`).run(...values);
@@ -1339,7 +1359,7 @@ app.get('/api/jobs/all', (req, res) => {
     const rows = db.prepare(`
         SELECT j.*, c.clip_index, c.scouted_id, c.caption, c.set1_path, c.set2_path, c.cover_path,
                p.name as page_name,
-               sv.title as video_title
+               sv.title as video_title, sv.thumbnail_url, sv.source_url
         FROM jobs j
         LEFT JOIN clips c ON c.id = j.clip_id
         LEFT JOIN pages p ON p.id = j.page_id
@@ -1348,6 +1368,96 @@ app.get('/api/jobs/all', (req, res) => {
         ORDER BY j.created_at DESC
     `).all(...params);
     res.json(rows);
+});
+
+// Grouped queue view — returns pages → scouted_videos (sets) → clips/jobs.
+// Used by the categorized queue UI ("จัดเป็นเซ็ตตามเรื่อง").
+//
+// IMPORTANT: lists EVERY enabled page even if it has zero jobs, so the user
+// can always reach the schedule editor (⚙ แก้ตั้งค่า) — required to set
+// daily_quota + post_times BEFORE any clips are queued.
+app.get('/api/queue/grouped', (req, res) => {
+    // 1. All enabled pages — seed map so empty pages still show with schedule editor.
+    const pageRows = db.prepare(
+        `SELECT id, name, daily_quota, post_times FROM pages WHERE enabled = 1 ORDER BY id`
+    ).all();
+
+    const pages = new Map();
+    for (const pr of pageRows) {
+        let postTimes = [];
+        try { if (pr.post_times) postTimes = JSON.parse(pr.post_times); }
+        catch { postTimes = []; }
+        pages.set(pr.id, {
+            page_id: pr.id,
+            page_name: pr.name,
+            daily_quota: pr.daily_quota || 5,
+            post_times: postTimes,
+            sets: new Map(),
+            total_clips: 0,
+            posted_clips: 0,
+        });
+    }
+
+    // 2. Jobs + clips + scouted videos — fold into the page map above.
+    const jobRows = db.prepare(`
+        SELECT j.id as job_id, j.status, j.scheduled_at, j.use_set, j.fb_post_id,
+               j.copyright_blocked, j.error_message, j.retry_count,
+               c.id as clip_id, c.clip_index, c.caption, c.set1_path, c.set2_path, c.cover_path,
+               sv.id as scouted_id, sv.title as video_title, sv.thumbnail_url,
+               sv.keyword, sv.source_url,
+               j.page_id
+        FROM jobs j
+        LEFT JOIN clips c ON c.id = j.clip_id
+        LEFT JOIN scouted_videos sv ON sv.id = c.scouted_id
+        ORDER BY j.page_id, sv.id, c.clip_index, j.scheduled_at
+    `).all();
+
+    for (const r of jobRows) {
+        // Orphan jobs (page deleted / disabled) — bucket into a synthetic page.
+        if (!pages.has(r.page_id)) {
+            pages.set(r.page_id ?? `orphan-${r.job_id}`, {
+                page_id: r.page_id,
+                page_name: '(เพจถูกลบหรือปิดใช้งาน)',
+                daily_quota: 0,
+                post_times: [],
+                sets: new Map(),
+                total_clips: 0,
+                posted_clips: 0,
+            });
+        }
+        const page = pages.get(r.page_id);
+        const setKey = r.scouted_id ?? `orphan-${r.job_id}`;
+        if (!page.sets.has(setKey)) {
+            page.sets.set(setKey, {
+                scouted_id: r.scouted_id,
+                video_title: r.video_title || '(no title)',
+                thumbnail_url: r.thumbnail_url,
+                keyword: r.keyword,
+                source_url: r.source_url,
+                jobs: [],
+                posted_count: 0,
+            });
+        }
+        const set = page.sets.get(setKey);
+        set.jobs.push({
+            job_id: r.job_id, clip_id: r.clip_id, clip_index: r.clip_index,
+            status: r.status, scheduled_at: r.scheduled_at, use_set: r.use_set,
+            fb_post_id: r.fb_post_id, error_message: r.error_message,
+            retry_count: r.retry_count, copyright_blocked: r.copyright_blocked,
+            caption: r.caption, set1_path: r.set1_path, set2_path: r.set2_path,
+            cover_path: r.cover_path,
+        });
+        page.total_clips++;
+        if (r.status === 'posted') { page.posted_clips++; set.posted_count++; }
+    }
+
+    // 3. Materialize to nested arrays for JSON.
+    const out = Array.from(pages.values()).map(p => ({
+        ...p,
+        sets: Array.from(p.sets.values()),
+        set_count: p.sets.size,
+    }));
+    res.json(out);
 });
 
 app.post('/api/jobs/:id/cancel', (req, res) => {

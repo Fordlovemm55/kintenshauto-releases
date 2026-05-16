@@ -32,7 +32,9 @@ describe('GET /api/health', () => {
     const res = await request(app).get('/api/health');
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
-    expect(res.body.version).toBe('1.0.0');
+    const pkg = require('../../package.json');
+    expect(res.body.version).toBe(pkg.version);
+    expect(res.body.version).toMatch(/^\d+\.\d+\.\d+/);
   });
 
   it('reports db state', async () => {

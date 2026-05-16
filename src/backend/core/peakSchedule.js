@@ -22,16 +22,41 @@ const PEAK_SLOTS = [
 ];
 
 /**
- * Find the next peak slot after `afterTime`, respecting min cooldown.
- * Returns Date object.
+ * Convert a list of "HH:MM" strings into the slot shape used internally.
+ * Returns null when the list is empty/invalid so callers fall back to PEAK_SLOTS.
  */
-function nextPeakSlotAfter(afterTime, cooldownMin = 30) {
+function customSlots(times) {
+    if (!Array.isArray(times) || !times.length) return null;
+    const re = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    const parsed = times
+        .map(t => {
+            const m = re.exec(t);
+            if (!m) return null;
+            return { hour: parseInt(m[1], 10), minute: parseInt(m[2], 10),
+                     label: t, why: 'จากที่ตั้งเองในหน้าคิวงาน' };
+        })
+        .filter(Boolean)
+        .sort((a, b) => (a.hour - b.hour) || (a.minute - b.minute));
+    return parsed.length ? parsed : null;
+}
+
+/**
+ * Find the next slot after `afterTime`, respecting min cooldown.
+ *
+ * @param {Date} afterTime
+ * @param {number} cooldownMin
+ * @param {string[]} [customTimes]  Optional list of "HH:MM" strings to use
+ *   instead of the global PEAK_SLOTS. When provided + non-empty, schedules
+ *   are page-specific (driven by the page's `post_times` column).
+ */
+function nextPeakSlotAfter(afterTime, cooldownMin = 30, customTimes) {
+    const slots = customSlots(customTimes) || PEAK_SLOTS;
     const earliest = new Date(afterTime.getTime() + cooldownMin * 60 * 1000);
 
     for (let dayOffset = 0; dayOffset < 60; dayOffset++) {
         const day = new Date(earliest);
         day.setDate(earliest.getDate() + dayOffset);
-        for (const slot of PEAK_SLOTS) {
+        for (const slot of slots) {
             const candidate = new Date(day);
             candidate.setHours(slot.hour, slot.minute, 0, 0);
             if (candidate > earliest) {
@@ -39,19 +64,19 @@ function nextPeakSlotAfter(afterTime, cooldownMin = 30) {
             }
         }
     }
-    // Should never reach here
-    return { date: earliest, slot: PEAK_SLOTS[0] };
+    return { date: earliest, slot: slots[0] };
 }
 
 /**
  * Plan N clips across peak slots starting from `startTime`.
- * Returns array of { date, slot, dayOffset, clipIndex }.
+ *
+ * @param {string[]} [customTimes]  See nextPeakSlotAfter.
  */
-function planClipSchedule(numClips, startTime = new Date(), cooldownMin = 30) {
+function planClipSchedule(numClips, startTime = new Date(), cooldownMin = 30, customTimes) {
     const plan = [];
-    let lastTime = new Date(startTime.getTime() - cooldownMin * 60 * 1000);  // so first slot can be picked
+    let lastTime = new Date(startTime.getTime() - cooldownMin * 60 * 1000);
     for (let i = 0; i < numClips; i++) {
-        const next = nextPeakSlotAfter(lastTime, cooldownMin);
+        const next = nextPeakSlotAfter(lastTime, cooldownMin, customTimes);
         const dayOffset = Math.floor((next.date - new Date(startTime.getFullYear(), startTime.getMonth(), startTime.getDate())) / 86400000);
         plan.push({
             date: next.date,

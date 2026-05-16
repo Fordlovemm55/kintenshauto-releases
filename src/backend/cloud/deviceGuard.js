@@ -115,16 +115,34 @@ function stopHeartbeat() {
   }
 }
 
-function subscribeKick(userId, accessToken, onKick) {
+function subscribeKick(userId, accessToken, mySessionToken, onKick) {
   unsubscribeKick();
   if (!userId || !accessToken) return false;
   const { getUserClient } = require('./supabaseClient');
   const client = getUserClient(accessToken);
   if (!client) return false;
 
-  _kickChannel = client.channel(`device_kick:${userId}`)
-    .on('broadcast', { event: 'kick' }, () => {
-      try { onKick && onKick(); } catch (e) { console.error('[deviceGuard] onKick threw:', e.message); }
+  // Listen to user_devices changes via Postgres CDC instead of broadcast — the
+  // execute_claim RPC mutates the row, so any takeover or admin force-logout
+  // shows up as UPDATE/DELETE here. Kicks fire when:
+  //   UPDATE → session_token differs from this device's token (another claim)
+  //   DELETE → admin force-logged this device out (or banned the user)
+  const fire = (reason) => {
+    try { onKick && onKick(reason); }
+    catch (e) { console.error('[deviceGuard] onKick threw:', e.message); }
+  };
+  _kickChannel = client.channel(`user-devices-${userId}`)
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'user_devices',
+      filter: `user_id=eq.${userId}`
+    }, (payload) => {
+      if (payload.eventType === 'DELETE') return fire('admin_force_logout');
+      const newToken = payload.new?.session_token;
+      if (mySessionToken && newToken && newToken !== mySessionToken) {
+        fire('another_device_signed_in');
+      }
     })
     .subscribe();
   return true;

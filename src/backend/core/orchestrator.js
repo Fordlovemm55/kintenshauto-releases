@@ -789,9 +789,15 @@ class Orchestrator {
             startFrom = new Date();
         }
 
-        // Plan ALL clips across peak slots — first batch immediate, rest auto-spread
+        // Plan ALL clips across peak slots — first batch immediate, rest auto-spread.
+        // page.post_times (JSON array of "HH:MM") overrides the global peak slots
+        // when set. Empty / unset → falls back to PEAK_SLOTS in peakSchedule.js.
         const cooldownMin = targetPage.cooldown_min || 30;
-        const schedule = planClipSchedule(clipWindows.length, startFrom, cooldownMin);
+        let customTimes;
+        try {
+            if (targetPage.post_times) customTimes = JSON.parse(targetPage.post_times);
+        } catch { customTimes = undefined; }
+        const schedule = planClipSchedule(clipWindows.length, startFrom, cooldownMin, customTimes);
         emit('schedule_planned', {
             count: schedule.length,
             firstSlot: friendlyThaiDate(schedule[0].date),

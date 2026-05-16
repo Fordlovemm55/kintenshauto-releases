@@ -20,18 +20,20 @@ async function checkVersion(accessToken, clientVersion) {
     if (!cfg.isConfigured) {
         return { ok: true, force_update: null, soft_update: null, reason: 'not_configured' };
     }
-    if (!accessToken) {
-        return { ok: true, force_update: null, soft_update: null, reason: 'no_token' };
-    }
     if (!clientVersion) {
         return { ok: true, force_update: null, soft_update: null, reason: 'no_version' };
     }
+
+    // Fall back to the anon/publishable key when no user session exists — the
+    // edge function accepts either, so update prompts can surface before login.
+    const token = accessToken || cfg.supabaseAnonKey;
 
     try {
         const res = await fetch(`${cfg.supabaseUrl}/functions/v1/check-version`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${accessToken}`,
+                'Authorization': `Bearer ${token}`,
+                'apikey': cfg.supabaseAnonKey,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ client_version: clientVersion })

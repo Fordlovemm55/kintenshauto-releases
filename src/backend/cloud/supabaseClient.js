@@ -5,7 +5,14 @@
 // Both return null if cloud isn't configured (env vars missing).
 
 const { createClient } = require('@supabase/supabase-js');
+const ws = require('ws');
 const { getCloudConfig } = require('./config');
+
+// Electron 32 embeds Node 20.x, which has no global WebSocket. Supabase's
+// realtime-js needs an explicit transport on Node < 22 or it throws
+// "Node.js X detected without native WebSocket support" when Realtime
+// channels (e.g. device-kick) try to connect.
+const REALTIME_OPTIONS = { transport: ws };
 
 let _anonClient = null;
 let _anonKey = null; // cache fingerprint — invalidates when env-driven config changes
@@ -20,7 +27,8 @@ function getAnonClient() {
       persistSession: false,
       autoRefreshToken: false,
       detectSessionInUrl: false
-    }
+    },
+    realtime: REALTIME_OPTIONS
   });
   _anonKey = fingerprint;
   return _anonClient;
@@ -32,7 +40,8 @@ function getUserClient(accessToken) {
   if (!cfg.isConfigured) return null;
   return createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    realtime: REALTIME_OPTIONS
   });
 }
 

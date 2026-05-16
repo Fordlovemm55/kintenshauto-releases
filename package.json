@@ -32,7 +32,8 @@
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "socket.io": "^4.7.5",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "ws": "^8.20.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.0",
@@ -63,6 +64,15 @@
       "schema.sql",
       "!node_modules/**/*test*/**",
       "!**/*.map"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Fordlovemm55",
+        "repo": "kintenshauto-releases",
+        "private": true,
+        "releaseType": "release"
+      }
     ],
     "asarUnpack": [
       "node_modules/better-sqlite3/**/*",
@@ -101,7 +111,6 @@
         }
       ],
       "icon": "assets/icon.ico",
-      "publisherName": "KINTENSHAUTO",
       "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
