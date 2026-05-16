@@ -503,10 +503,53 @@ app.post('/api/auth/login', asyncHandler(async (req, res) => {
                      : 400;
         return res.status(status).json({ ok: false, reason: result.reason, error: result.message });
     }
-    res.json({ ok: true, user: result.user });
+
+    // Plan 2 Task 8: claim the device slot
+    const { claimDevice, startHeartbeat, subscribeKick } = require('./cloud/deviceGuard');
+    const claim = await claimDevice(result.session.access_token);
+    if (!claim.ok) {
+        // Login succeeded but claim failed — log out + return error
+        await authService.logout();
+        const status = claim.reason === 'not_configured' ? 503 : 503;
+        return res.status(status).json({
+            ok: false, reason: 'device_claim_failed', error: claim.message
+        });
+    }
+
+    // Start heartbeat
+    startHeartbeat(
+        () => authService.getStoredSession()?.access_token || null,
+        5 * 60 * 1000,
+        (reason) => console.warn('[deviceGuard] heartbeat issue:', reason)
+    );
+
+    // Subscribe to kick signal — when another device claims us, log out + notify React
+    subscribeKick(result.user.id, result.session.access_token, async () => {
+        console.warn('[deviceGuard] received kick signal — closing browsers + logging out');
+        try {
+            const browserManager = require('./core/browserManager');
+            await browserManager.closeAll();
+        } catch (e) {
+            console.error('[deviceGuard] closeAll failed:', e.message);
+        }
+        const { stopHeartbeat, unsubscribeKick } = require('./cloud/deviceGuard');
+        stopHeartbeat();
+        unsubscribeKick();
+        await authService.logout();
+        try { io.emit('auth:kicked', { reason: 'another_device_signed_in' }); } catch {}
+    });
+
+    res.json({
+        ok: true,
+        user: result.user,
+        is_takeover: claim.is_takeover
+    });
 }));
 
 app.post('/api/auth/logout', asyncHandler(async (req, res) => {
+    const { stopHeartbeat, unsubscribeKick } = require('./cloud/deviceGuard');
+    stopHeartbeat();
+    unsubscribeKick();
     await authService.logout();
     res.json({ ok: true });
 }));

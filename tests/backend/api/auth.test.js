@@ -27,7 +27,10 @@ beforeAll(async () => {
         });
       }
       return HttpResponse.json({ error: 'invalid_grant' }, { status: 400 });
-    })
+    }),
+    http.post(`${SUPA_URL}/functions/v1/device-claim`, () =>
+      HttpResponse.json({ status: 'claimed', is_takeover: false, session_token: 'tok-abc' })
+    )
   );
   mswServer.listen({ onUnhandledRequest: 'bypass' });
 
