@@ -2368,12 +2368,16 @@ io.on('connection', (socket) => {
 // ====================================================================
 // SECURITY: Bind explicitly to 127.0.0.1 (localhost-only) so the backend isn't reachable
 // from other devices on the network. Without this, Node may default to 0.0.0.0.
-server.listen(PORT, '127.0.0.1', () => {
-    console.log(`[server] KINTENSHAUTO backend listening on http://localhost:${PORT}`);
-    console.log(`[server] DB: ${DB_PATH}`);
-    console.log(`[server] Overlays: ${OVERLAYS_DIR}`);
-    console.log(`[server] Downloads: ${DOWNLOADS_DIR}`);
-});
+// Only listen if not running under vitest — tests use supertest against the
+// app object directly without binding to a port.
+if (!process.env.VITEST) {
+    server.listen(PORT, '127.0.0.1', () => {
+        console.log(`[server] KINTENSHAUTO backend listening on http://localhost:${PORT}`);
+        console.log(`[server] DB: ${DB_PATH}`);
+        console.log(`[server] Overlays: ${OVERLAYS_DIR}`);
+        console.log(`[server] Downloads: ${DOWNLOADS_DIR}`);
+    });
+}
 
 // ------------------------------------------------------------------------
 // Background maintenance: DB backup + orphan file cleanup
@@ -2681,3 +2685,6 @@ process.on('unhandledRejection', (err) => console.error('[unhandled]', err));
         // ของหลักยังทำงานปกติ — ฟีเจอร์ใหม่แค่ใช้ไม่ได้
     }
 })();
+
+// Export for tests (supertest hits app directly without binding to a port)
+module.exports = { app, server };
