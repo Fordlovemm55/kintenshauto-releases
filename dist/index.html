@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: http://localhost:* ws://localhost:* https://fonts.googleapis.com https://fonts.gstatic.com;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data: blob: http://localhost:* http://127.0.0.1:* https:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*;" />
     <title>KINTENSHAUTO · 剣天照</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -30,5 +30,9 @@
         <div style="margin-top: 12px; color: #8b7355; font-size: 12px; letter-spacing: 3px;">กำลังเริ่มระบบ...</div>
       </div>
     </div>
+    <!-- Hand-written vanilla JS UI injections (Channel Watcher + Profiles Manager).
+         Placed in public/assets/ so Vite copies them to dist/assets/ on build. -->
+    <script defer src="./assets/watcher-injection.js"></script>
+    <script defer src="./assets/profiles-injection.js"></script>
   </body>
 </html>
