@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import SamuraiBackground from './components/SamuraiBackground';
 import ChannelWatcher from './components/ChannelWatcher';
-import UpdatePromptModal from './components/UpdatePromptModal';
+import QueueView from './components/QueueView';
 
 const NAV = [
   { key: 'home',       icon: '⚔', th: 'หน้าหลัก',          jp: '本拠' },
@@ -26,7 +26,7 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
-export default function Dashboard() {
+export default function Dashboard({ user }) {
   const [nav, setNav] = useState('home');
   const [stats, setStats] = useState({ posted_today: 0, in_queue: 0, pending_reviews: 0, pending_approvals: 0 });
   const [pages, setPages] = useState([]);
@@ -35,8 +35,10 @@ export default function Dashboard() {
   const [keyword, setKeyword] = useState('');
   const [running, setRunning] = useState(false);
   const [toast, setToast] = useState(null);
-  const [version, setVersion] = useState('1.0.0');
-  const [updatePrompt, setUpdatePrompt] = useState(null); // { kind: 'force'|'soft', info }
+  const [version, setVersion] = useState('');
+  // Update modal handling lives in App.jsx (renders ABOVE Dashboard so force
+  // updates can block login too). Dashboard used to mount its own modal here
+  // and double-prompted on every cloud check tick. Don't re-add.
 
   const showToast = useCallback((title, body, kind = 'info') => {
     setToast({ title, body, kind });
@@ -68,18 +70,6 @@ export default function Dashboard() {
     return () => clearInterval(iv);
   }, [refresh]);
 
-  // Cloud update prompts from Electron main process (IPC)
-  useEffect(() => {
-    if (!window.kintenshauto) return;
-    const offForce = window.kintenshauto.onCloudUpdateForce?.((info) => {
-      setUpdatePrompt({ kind: 'force', info });
-    });
-    const offSoft = window.kintenshauto.onCloudUpdateSoft?.((info) => {
-      setUpdatePrompt({ kind: 'soft', info });
-    });
-    return () => { offForce?.(); offSoft?.(); };
-  }, []);
-
   // Socket.io: server-initiated kick when another device claims the seat
   useEffect(() => {
     let sock;
@@ -87,9 +77,15 @@ export default function Dashboard() {
       try {
         const { io } = await import('socket.io-client');
         sock = io('http://localhost:3003');
-        sock.on('auth:kicked', () => {
-          // Reload — App.jsx will see logged_in=false and show LoginScreen
-          alert('Signed in on another device. Returning to login.');
+        sock.on('auth:kicked', (payload) => {
+          // Reload — App.jsx will see logged_in=false and show LoginScreen.
+          // Intentionally do NOT reveal admin involvement in force-logout —
+          // present it as a generic session-ended notice so the desktop user
+          // can't distinguish admin kick from another-device signin.
+          const msg = payload?.reason === 'user_banned'
+            ? 'Your account has been banned. Returning to login.'
+            : 'Signed in on another device. Returning to login.';
+          alert(msg);
           window.location.reload();
         });
       } catch (e) { console.warn('[socket] connect failed:', e); }
@@ -115,43 +111,62 @@ export default function Dashboard() {
     }
   };
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const closeSidebar = () => setSidebarOpen(false);
+
   return (
     <div className="app-shell">
       <SamuraiBackground opacity={0.25} />
 
       <header className="app-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <button className="hamburger-btn" aria-label="เปิด/ปิดเมนู"
+                  onClick={() => setSidebarOpen(o => !o)}>
+            {sidebarOpen ? '✕' : '☰'}
+          </button>
           <div className="kanji-title" style={{ fontSize: 28 }}>剣天照</div>
           <div>
             <div style={{ fontSize: 14, fontWeight: 500, letterSpacing: 1 }}>KINTENSHAUTO</div>
             <div style={{ fontSize: 10, color: 'var(--gold)', letterSpacing: 1 }}>เครื่องมือโพสต์ Reel · v{version}</div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <span className="badge badge-success status-dot">ออนไลน์</span>
+        <div style={{ display: 'flex', gap: 8 }} className="header-chip-row">
+          <span className="badge badge-success status-dot header-chip-secondary">ออนไลน์</span>
           {stats.pending_reviews > 0 && (
-            <span className="badge badge-danger status-dot" onClick={() => setNav('reviews')} style={{ cursor: 'pointer' }}>
+            <button className="badge badge-danger status-dot"
+                    aria-label={`รอตรวจ ${stats.pending_reviews} รายการ ไปหน้าตรวจสอบ`}
+                    onClick={() => setNav('reviews')}
+                    style={{ cursor: 'pointer', border: 'none' }}>
               รอตรวจ {stats.pending_reviews}
-            </span>
+            </button>
           )}
-          <span className="badge badge-gold">{pages.length} เพจ</span>
+          <span className="badge badge-gold header-chip-secondary">{pages.length} เพจ</span>
         </div>
       </header>
 
-      <nav className="app-sidebar">
+      {sidebarOpen && (
+        <div className="sidebar-scrim open" onClick={closeSidebar}
+             role="presentation" aria-hidden="true" />
+      )}
+
+      <nav className={`app-sidebar${sidebarOpen ? ' open' : ''}`} aria-label="เมนูหลัก">
         <div className="nav-section">メニュー · เมนู</div>
         {NAV.map(item => (
-          <div
+          <button
             key={item.key}
+            type="button"
             className={`nav-item ${nav === item.key ? 'active' : ''}`}
-            onClick={() => setNav(item.key)}
+            onClick={() => { setNav(item.key); closeSidebar(); }}
+            aria-current={nav === item.key ? 'page' : undefined}
+            style={{ width: '100%', textAlign: 'left' }}
           >
-            <span className="icon">{item.icon}</span>
+            <span className="icon" aria-hidden="true">{item.icon}</span>
             <span style={{ flex: 1 }}>{item.th}</span>
             {item.alertKey && stats[item.alertKey] > 0 && (
-              <span className="badge badge-danger" style={{ fontSize: 10, padding: '1px 6px' }}>{stats[item.alertKey]}</span>
+              <span className="badge badge-danger" aria-label={`${stats[item.alertKey]} alerts`}
+                    style={{ fontSize: 10, padding: '1px 6px' }}>{stats[item.alertKey]}</span>
             )}
-          </div>
+          </button>
         ))}
 
         <div style={{ marginTop: 24, padding: '0 14px' }}>
@@ -159,6 +174,28 @@ export default function Dashboard() {
           <button className="btn-ghost" style={{ width: '100%', fontSize: 11, padding: '8px 10px' }}
                   onClick={() => window.kintenshauto?.getPaths().then(p => window.kintenshauto?.openExternal(p.logDir))}>
             📁 เปิดโฟลเดอร์ logs
+          </button>
+        </div>
+
+        <div style={{ marginTop: 'auto', padding: '14px' }}>
+          <div className="jp-divider">退出</div>
+          {user?.email && (
+            <div style={{ fontSize: 10, color: 'var(--text-muted)',
+                          marginBottom: 6, wordBreak: 'break-all', textAlign: 'center' }}>
+              {user.email}
+            </div>
+          )}
+          <button
+            className="btn-ghost"
+            style={{ width: '100%', fontSize: 11, padding: '8px 10px', color: 'var(--danger)' }}
+            onClick={async () => {
+              if (!confirm('Sign out of KINTENSHAUTO?')) return;
+              try {
+                await fetch('http://localhost:3003/api/auth/logout', { method: 'POST' });
+              } catch {}
+              window.location.reload();
+            }}>
+            ↩ Sign out
           </button>
         </div>
       </nav>
@@ -173,7 +210,8 @@ export default function Dashboard() {
           />
         )}
         {nav === 'watcher' && <ChannelWatcher showToast={showToast} />}
-        {nav !== 'home' && nav !== 'watcher' && <PlaceholderView section={NAV.find(n => n.key === nav)} />}
+        {nav === 'queue' && <QueueView showToast={showToast} />}
+        {nav !== 'home' && nav !== 'watcher' && nav !== 'queue' && <PlaceholderView section={NAV.find(n => n.key === nav)} />}
       </main>
 
       {toast && (
@@ -183,18 +221,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {updatePrompt && (
-        <UpdatePromptModal
-          kind={updatePrompt.kind}
-          info={updatePrompt.info}
-          onUpdate={() => {
-            if (updatePrompt.info.download_url) {
-              window.kintenshauto?.openExternal(updatePrompt.info.download_url);
-            }
-          }}
-          onLater={() => setUpdatePrompt(null)}
-        />
-      )}
     </div>
   );
 }
@@ -202,7 +228,7 @@ export default function Dashboard() {
 function HomeView({ stats, pages, recentJobs, selectedPage, setSelectedPage, keyword, setKeyword, startPipeline, running }) {
   return (
     <div className="fade-in">
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+      <div className="home-stat-grid" style={{ marginBottom: 20 }}>
         <div className="stat-card">
           <div className="stat-jp">本日</div>
           <div className="stat-label">วันนี้</div>
@@ -240,19 +266,21 @@ function HomeView({ stats, pages, recentJobs, selectedPage, setSelectedPage, key
             </div>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 12, alignItems: 'flex-end' }}>
+          <div className="home-quick-grid">
             <div>
-              <label>เลือกเพจ</label>
-              <select value={selectedPage || ''} onChange={e => setSelectedPage(Number(e.target.value))}>
+              <label htmlFor="qp-page">เลือกเพจ</label>
+              <select id="qp-page" value={selectedPage || ''}
+                      onChange={e => setSelectedPage(Number(e.target.value))}>
                 {pages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
             <div>
-              <label>Keyword ค้นคลิป</label>
-              <input placeholder="เช่น ซีรีย์จีน, ซีรีย์เกาหลี"
+              <label htmlFor="qp-kw">Keyword ค้นคลิป</label>
+              <input id="qp-kw" placeholder="เช่น ซีรีย์จีน, ซีรีย์เกาหลี"
                      value={keyword} onChange={e => setKeyword(e.target.value)}/>
             </div>
-            <button className="btn-primary" onClick={startPipeline} disabled={running} style={{ padding: '10px 24px' }}>
+            <button className="btn-primary" onClick={startPipeline} disabled={running}
+                    style={{ padding: '10px 24px', whiteSpace: 'nowrap' }}>
               {running ? '⏳ กำลังเริ่ม...' : '⚔ RUN'}
             </button>
           </div>

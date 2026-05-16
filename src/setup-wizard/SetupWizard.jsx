@@ -35,6 +35,11 @@ export default function SetupWizard({ onComplete }) {
   });
   const [skippedProfile, setSkippedProfile] = useState(false);
   const [skippedAI, setSkippedAI] = useState(false);
+  const [version, setVersion] = useState('');
+
+  useEffect(() => {
+    window.kintenshauto?.getVersion?.().then(setVersion).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (step === 2 && !deps) {
@@ -115,7 +120,7 @@ export default function SetupWizard({ onComplete }) {
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>การตั้งค่าครั้งแรก · 初期設定</div>
         </div>
 
-        <div style={{ display: 'flex', gap: 16, marginBottom: 40, alignItems: 'center' }}>
+        <div className="setup-steps" style={{ marginBottom: 40 }}>
           {STEPS.map((s, i) => (
             <React.Fragment key={s.num}>
               <div style={{
@@ -136,7 +141,8 @@ export default function SetupWizard({ onComplete }) {
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{s.th}</div>
               </div>
               {i < STEPS.length - 1 && (
-                <div style={{ width: 30, height: 1, background: step > s.num ? 'var(--success)' : 'var(--border-faint)' }}/>
+                <div className="setup-step-connector"
+                     style={{ width: 30, height: 1, background: step > s.num ? 'var(--success)' : 'var(--border-faint)' }}/>
               )}
             </React.Fragment>
           ))}
@@ -399,7 +405,7 @@ export default function SetupWizard({ onComplete }) {
         </div>
 
         <div style={{ marginTop: 20, fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1 }}>
-          v1.0.0 · ขั้นตอน {step}/5
+          {version && `v${version} · `}ขั้นตอน {step}/5
         </div>
       </div>
     </div>

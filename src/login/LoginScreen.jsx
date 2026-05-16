@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import SamuraiBackground from '../components/SamuraiBackground';
 
 const API = 'http://localhost:3003';
@@ -9,6 +9,13 @@ export default function LoginScreen({ onSuccess }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [takeoverNote, setTakeoverNote] = useState(false);
+  const [version, setVersion] = useState('');
+
+  useEffect(() => {
+    if (window.kintenshauto?.getVersion) {
+      window.kintenshauto.getVersion().then(setVersion).catch(() => {});
+    }
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -56,32 +63,35 @@ export default function LoginScreen({ onSuccess }) {
         width: '100%', height: '100%',
         display: 'flex', alignItems: 'center', justifyContent: 'center'
       }}>
-        <form onSubmit={submit} className="panel" style={{ width: 380, padding: 32 }}>
+        <form onSubmit={submit} className="panel"
+              style={{ width: '100%', maxWidth: 380, padding: 32, margin: 16 }}>
           <div style={{ textAlign: 'center', marginBottom: 24 }}>
             <div className="kanji-title" style={{ fontSize: 48 }}>剣天照</div>
             <div style={{ fontSize: 13, color: 'var(--gold)', letterSpacing: 3 }}>
-              KINTENSHAUTO
+              KINTENSHAUTO {version && <span style={{ opacity: 0.6 }}>· v{version}</span>}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
               Sign in to continue
             </div>
           </div>
 
-          <label>Email</label>
-          <input
+          <label htmlFor="login-email">Email</label>
+          <input id="login-email"
             type="email" value={email}
             onChange={e => setEmail(e.target.value)}
             placeholder="you@example.com"
             required disabled={submitting}
             style={{ marginBottom: 12 }}
+            autoComplete="email"
             autoFocus
           />
 
-          <label>Password</label>
-          <input
+          <label htmlFor="login-password">Password</label>
+          <input id="login-password"
             type="password" value={password}
             onChange={e => setPassword(e.target.value)}
             required disabled={submitting}
+            autoComplete="current-password"
             style={{ marginBottom: 16 }}
           />
 
