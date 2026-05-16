@@ -7,7 +7,6 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
-const Database = require('better-sqlite3');
 const { Server } = require('socket.io');
 
 const DB_PATH = process.env.KINTENSHAUTO_DB || path.join(__dirname, '../../kintenshauto.db');
@@ -160,74 +159,45 @@ try {
     process.exit(1);
 }
 
+const { openDatabase, loadSchema, applyMigrations } = require('./local/db');
+
 const schemaPath = path.join(__dirname, '../../schema.sql');
-const dbExists = fs.existsSync(DB_PATH);
-let db;
+let db, dbExists;
 try {
-    db = new Database(DB_PATH);
+    const opened = openDatabase(DB_PATH);
+    db = opened.db;
+    dbExists = !opened.isFresh;
 } catch (e) {
-    console.error(`[startup] FATAL: cannot open DB at ${DB_PATH}: ${e.message}`);
+    console.error('[startup] FATAL:', e.message);
     process.exit(1);
 }
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
-db.pragma('busy_timeout = 5000');   // retry for up to 5s on SQLITE_BUSY instead of crashing
-db.pragma('synchronous = NORMAL');  // faster writes, still safe with WAL
 
 if (!dbExists && fs.existsSync(schemaPath)) {
-    const schema = fs.readFileSync(schemaPath, 'utf-8');
-    db.exec(schema);
+    loadSchema(db, schemaPath);
     console.log('[server] Database initialized from schema.sql');
 }
-
 // Always ensure schema (idempotent via CREATE TABLE IF NOT EXISTS)
-if (fs.existsSync(schemaPath)) {
-    try { db.exec(fs.readFileSync(schemaPath, 'utf-8')); } catch (e) { /* non-fatal */ }
-}
+try { loadSchema(db, schemaPath); } catch { /* non-fatal */ }
 
-// ---- Lightweight migrations (additive columns only) ----
-function addColumnIfMissing(table, column, definition) {
-    try {
-        const cols = db.prepare(`PRAGMA table_info(${table})`).all();
-        if (!cols.find(c => c.name === column)) {
-            db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-            console.log(`[migration] added ${table}.${column}`);
-        }
-    } catch (e) { console.error('[migration]', table, column, e.message); }
-}
-// 1 video / 1 page assignment
-addColumnIfMissing('scouted_videos', 'assigned_page_id', 'INTEGER');
-addColumnIfMissing('clips', 'assigned_page_id', 'INTEGER');
-// Per-page batch settings
-addColumnIfMissing('pages', 'posts_per_session', 'INTEGER DEFAULT 3');
-addColumnIfMissing('pages', 'session_interval_hours', 'INTEGER DEFAULT 24');
-addColumnIfMissing('pages', 'last_session_at', 'DATETIME');
-// Per-page default search keyword — when global keyword is empty, each page uses its own.
-// Lets a single "เริ่มงาน" click pull different shows for different pages
-// (e.g. page A = "ซีรีย์จีน" · page B = "อนิเมะ").
-addColumnIfMissing('pages', 'default_keyword', 'TEXT');
-addColumnIfMissing('jobs', 'priority', 'INTEGER DEFAULT 0');  // 1 = post-now / fast-path
+applyMigrations(db, [
+    { table: 'scouted_videos', column: 'assigned_page_id', definition: 'INTEGER' },
+    { table: 'clips',          column: 'assigned_page_id', definition: 'INTEGER' },
+    { table: 'pages',          column: 'posts_per_session', definition: 'INTEGER DEFAULT 3' },
+    { table: 'pages',          column: 'session_interval_hours', definition: 'INTEGER DEFAULT 24' },
+    { table: 'pages',          column: 'last_session_at', definition: 'DATETIME' },
+    { table: 'pages',          column: 'default_keyword', definition: 'TEXT' },
+    { table: 'jobs',           column: 'priority', definition: 'INTEGER DEFAULT 0' },
+    { table: 'clips',          column: 'cover_path', definition: 'TEXT' },
+    { table: 'pages',          column: 'use_ai_cover', definition: 'INTEGER DEFAULT 0' },
+    { table: 'pages',          column: 'cover_prompt', definition: 'TEXT' },
+    { table: 'scouted_videos', column: 'thumbnail_local_path', definition: 'TEXT' },
+    { table: 'caption_prompts', column: 'selected_model', definition: 'TEXT' },
+    { table: 'profiles',       column: 'platform', definition: "TEXT NOT NULL DEFAULT 'facebook'" },
+    { table: 'profiles',       column: 'account_handle', definition: 'TEXT' }
+]);
 
-// AI Cover feature
-addColumnIfMissing('clips', 'cover_path', 'TEXT');              // generated/fallback cover image path
-addColumnIfMissing('pages', 'use_ai_cover', 'INTEGER DEFAULT 0'); // toggle per page (legacy, now global)
-addColumnIfMissing('pages', 'cover_prompt', 'TEXT');            // per-page override (legacy)
-// Reference image for "match the show" cover gen — downloaded from bilibili thumbnail
-addColumnIfMissing('scouted_videos', 'thumbnail_local_path', 'TEXT');
-
-// Caption model selection: each caption_prompts row can pick a specific model
-// (e.g. "gpt-4o-mini" or "claude-haiku-4-5-20251001") instead of relying on
-// whatever the linked ai_provider row says. Lets user mix providers + see prices.
-addColumnIfMissing('caption_prompts', 'selected_model', 'TEXT');
-
-// Multi-platform profile support: X (Twitter) + Instagram in addition to Facebook.
-// Existing rows default to 'facebook' so FB login flow is unchanged.
-// platform values: 'facebook' | 'x' | 'instagram'
-addColumnIfMissing('profiles', 'platform', "TEXT NOT NULL DEFAULT 'facebook'");
-// account_handle: optional display handle for X (@elonmusk) / IG (@user). FB uses fb_username.
-addColumnIfMissing('profiles', 'account_handle', 'TEXT');
-
-// One-time upgrade: old Gemini default "gemini-2.0-flash" is EOL — swap to gemini-2.5-flash
+// One-time upgrade: old Gemini default "gemini-2.0-flash" is EOL → swap to gemini-2.5-flash
+// (preserved from original server.js — must run AFTER applyMigrations so caption_prompts.selected_model exists)
 try {
     const r = db.prepare(`
         UPDATE ai_providers SET model = 'gemini-2.5-flash'
@@ -236,7 +206,7 @@ try {
     if (r.changes > 0) console.log(`[migration] upgraded ${r.changes} ai_providers row(s) from gemini-2.0-flash to gemini-2.5-flash`);
 } catch (e) { /* ignore if table not ready */ }
 
-// Now safe to load storage paths (db is ready)
+// Load user-configured storage paths (preserved from original server.js)
 loadStoragePathsFromSettings();
 
 // ------------- Load services -------------
