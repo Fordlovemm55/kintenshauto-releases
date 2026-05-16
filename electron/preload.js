@@ -44,5 +44,15 @@ contextBridge.exposeInMainWorld('kintenshauto', {
         return () => ipcRenderer.removeListener('update:downloaded', listener);
     },
     downloadUpdate: () => ipcRenderer.invoke('update:download'),
-    installUpdate: () => ipcRenderer.invoke('update:install')
+    installUpdate: () => ipcRenderer.invoke('update:install'),
+    onCloudUpdateForce: (cb) => {
+        const listener = (_, info) => { try { cb(info); } catch {} };
+        ipcRenderer.on('cloud-update:force', listener);
+        return () => ipcRenderer.removeListener('cloud-update:force', listener);
+    },
+    onCloudUpdateSoft: (cb) => {
+        const listener = (_, info) => { try { cb(info); } catch {} };
+        ipcRenderer.on('cloud-update:soft', listener);
+        return () => ipcRenderer.removeListener('cloud-update:soft', listener);
+    }
 });

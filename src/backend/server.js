@@ -600,6 +600,18 @@ app.post('/api/auth/refresh', asyncHandler(async (req, res) => {
     res.json({ ok: true });
 }));
 
+// Plan 2 Task 13: cloud version check
+app.get('/api/version/check', asyncHandler(async (req, res) => {
+    const session = authService.getStoredSession();
+    if (!session?.access_token) {
+        return res.json({ ok: true, force_update: null, soft_update: null, reason: 'no_session' });
+    }
+    const { checkVersion } = require('./cloud/updateChecker');
+    const pkg = require('../../package.json');
+    const result = await checkVersion(session.access_token, pkg.version);
+    res.json(result);
+}));
+
 // ====================================================================
 // REQUIRE AUTH MIDDLEWARE (Plan 2)
 // Blocks /api/* unless a local Supabase session exists.

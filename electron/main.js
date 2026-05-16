@@ -535,6 +535,44 @@ function setupAutoUpdater() {
     ipcMain.handle('update:install', () => autoUpdater.quitAndInstall());
 }
 
+// Plan 2 Task 13: cloud-driven version check. Polls /api/version/check 15s
+// after launch; sends `cloud-update:force` or `cloud-update:soft` IPC events
+// to the renderer so React can render UpdatePromptModal (Plan 2 Task 15).
+function setupCloudVersionCheck() {
+    if (!app.isPackaged && !process.env.KINTENSHAUTO_FORCE_VERSION_CHECK) {
+        // Skip in dev mode unless explicitly enabled.
+        return;
+    }
+    setTimeout(async () => {
+        try {
+            const http = require('http');
+            const result = await new Promise((resolve) => {
+                const req = http.get({
+                    host: '127.0.0.1', port: backendPort,
+                    path: '/api/version/check', timeout: 5000
+                }, res => {
+                    let body = '';
+                    res.on('data', c => body += c);
+                    res.on('end', () => {
+                        try { resolve(JSON.parse(body)); }
+                        catch { resolve(null); }
+                    });
+                });
+                req.on('error', () => resolve(null));
+                req.on('timeout', () => { req.destroy(); resolve(null); });
+            });
+            if (!result) return;
+            if (result.force_update) {
+                logInfo('[cloud-update] force update available: ' + result.force_update.required_version);
+                try { mainWindow?.webContents.send('cloud-update:force', result.force_update); } catch {}
+            } else if (result.soft_update) {
+                logInfo('[cloud-update] soft update available: ' + result.soft_update.latest_version);
+                try { mainWindow?.webContents.send('cloud-update:soft', result.soft_update); } catch {}
+            }
+        } catch (e) { logError('cloud version check: ' + e.message); }
+    }, 15000); // 15s after app launch
+}
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
     app.quit();
@@ -565,6 +603,7 @@ if (!gotLock) {
         createMainWindow();
         createTray();
         setupAutoUpdater();
+        setupCloudVersionCheck();
     }).catch(e => {
         logError('whenReady failed: ' + (e && e.stack || e));
     });
