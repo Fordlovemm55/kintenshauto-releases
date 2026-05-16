@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import SamuraiBackground from './components/SamuraiBackground';
 import ChannelWatcher from './components/ChannelWatcher';
+import UpdatePromptModal from './components/UpdatePromptModal';
 
 const NAV = [
   { key: 'home',       icon: '⚔', th: 'หน้าหลัก',          jp: '本拠' },
@@ -35,6 +36,7 @@ export default function Dashboard() {
   const [running, setRunning] = useState(false);
   const [toast, setToast] = useState(null);
   const [version, setVersion] = useState('1.0.0');
+  const [updatePrompt, setUpdatePrompt] = useState(null); // { kind: 'force'|'soft', info }
 
   const showToast = useCallback((title, body, kind = 'info') => {
     setToast({ title, body, kind });
@@ -65,6 +67,35 @@ export default function Dashboard() {
     }
     return () => clearInterval(iv);
   }, [refresh]);
+
+  // Cloud update prompts from Electron main process (IPC)
+  useEffect(() => {
+    if (!window.kintenshauto) return;
+    const offForce = window.kintenshauto.onCloudUpdateForce?.((info) => {
+      setUpdatePrompt({ kind: 'force', info });
+    });
+    const offSoft = window.kintenshauto.onCloudUpdateSoft?.((info) => {
+      setUpdatePrompt({ kind: 'soft', info });
+    });
+    return () => { offForce?.(); offSoft?.(); };
+  }, []);
+
+  // Socket.io: server-initiated kick when another device claims the seat
+  useEffect(() => {
+    let sock;
+    (async () => {
+      try {
+        const { io } = await import('socket.io-client');
+        sock = io('http://localhost:3003');
+        sock.on('auth:kicked', () => {
+          // Reload — App.jsx will see logged_in=false and show LoginScreen
+          alert('Signed in on another device. Returning to login.');
+          window.location.reload();
+        });
+      } catch (e) { console.warn('[socket] connect failed:', e); }
+    })();
+    return () => { try { sock?.disconnect(); } catch {} };
+  }, []);
 
   const startPipeline = async () => {
     if (!selectedPage) { showToast('เลือกเพจก่อน', 'ต้องเพิ่มเฟส + เพจก่อนเริ่มโพสต์', 'warning'); return; }
@@ -150,6 +181,19 @@ export default function Dashboard() {
           <div className="toast-title">{toast.title}</div>
           <div className="toast-body">{toast.body}</div>
         </div>
+      )}
+
+      {updatePrompt && (
+        <UpdatePromptModal
+          kind={updatePrompt.kind}
+          info={updatePrompt.info}
+          onUpdate={() => {
+            if (updatePrompt.info.download_url) {
+              window.kintenshauto?.openExternal(updatePrompt.info.download_url);
+            }
+          }}
+          onLater={() => setUpdatePrompt(null)}
+        />
       )}
     </div>
   );
