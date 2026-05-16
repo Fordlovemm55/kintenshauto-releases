@@ -31,12 +31,40 @@ src/backend/
                      commentTemplateEngine, platformConfig
 ```
 
-## Cloud project
+## Cloud integration (Plan 2)
 
-Separate repo (not yet created): `../kintenshauto-cloud/`.
-Will contain Supabase migrations + edge functions (device-claim, check-version,
-admin-reset-device). Setup happens in Plan 1 Phase C — currently BLOCKED on
-Supabase CLI install + Docker Desktop + user creating a Supabase project.
+Desktop cloud modules live in `src/backend/cloud/`. All cloud calls happen
+through these modules — React UI only talks to the local Express backend.
+
+- `cloud/config.js`         reads KINTENSHAUTO_SUPABASE_URL + ANON_KEY from env or .env
+- `cloud/supabaseClient.js` singleton + per-user clients
+- `cloud/sessionStore.js`   encrypted .session file (AES-256-CBC, same key as FB pw)
+- `cloud/authService.js`    login / logout / refresh
+- `cloud/audit.js`          local queue + cloud flush
+- `cloud/deviceGuard.js`    1-device claim + heartbeat + Realtime kick
+- `cloud/syncEngine.js`     LWW push/pull for 8 synced tables
+- `cloud/syncHooks.js`      debounced push (2s) — `_syncHooks.notifySync(table, pk)`
+                            from POST/PUT/DELETE handlers (instrumentation pending)
+- `cloud/updateChecker.js`  check-version edge function client
+
+## Cloud project (separate repo)
+
+`../kintenshauto-cloud/` — deployed to https://etutmagymtlfagcsvavk.supabase.co
+13 tables, 3 RPCs, 3 edge functions, full RLS. See `../kintenshauto-cloud/DEPLOY.md`
+for the deploy commands.
+
+To run desktop app against real cloud:
+1. `.env` at project root already has `KINTENSHAUTO_SUPABASE_URL` + `KINTENSHAUTO_SUPABASE_ANON_KEY`
+2. `npm start` — login screen will reach real Supabase
+
+## Hand-written UI injections (preserved through builds)
+
+`public/assets/watcher-injection.js` + `public/assets/profiles-injection.js`
+are vanilla JS overlays for the Channel Watcher + Profile Manager screens.
+Vite copies `public/` to `dist/` on every build, so these files survive
+`npm run build-frontend` and stay referenced by index.html.
+
+If you edit them, restart the app (HMR doesn't apply to non-module scripts).
 
 ## Testing
 
