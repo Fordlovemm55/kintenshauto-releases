@@ -1,0 +1,22 @@
+node_modules/
+# dist/ is part of the source bundle — committed (hand-written injection JS lives there).
+# Vite regenerates dist/assets/index-*.js but dist/assets/watcher-injection.js +
+# profiles-injection.js are hand-maintained and must stay tracked.
+dist-installer/
+bin/
+*.log
+.env
+.env.local
+.DS_Store
+Thumbs.db
+.setup-complete
+kintenshauto.db
+kintenshauto.db-wal
+kintenshauto.db-shm
+chrome-profiles/
+downloads/
+overlays/
+logs/
+*.tmp
+# Test artifacts (added during Plan 1)
+coverage/

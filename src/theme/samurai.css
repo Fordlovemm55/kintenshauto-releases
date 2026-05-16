@@ -1,0 +1,507 @@
+/* ============================================================
+ * KINTENSHAUTO · 剣天照 · Samurai Theme
+ * ============================================================
+ * ฟอนต์: Thai (Sarabun) + Japanese (Noto Serif JP)
+ * สี:   สีแดงซามูไร + ทอง + ครีม + น้ำหมึก
+ * ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Noto+Serif+JP:wght@400;500;700&family=Yuji+Syuku&display=swap');
+
+:root {
+  /* Core palette */
+  --sumi-ink: #0a0a0d;
+  --sumi-dark: #1a1512;
+  --sumi-mid: #2a1f1c;
+  --paper-cream: #f4e8d0;
+  --paper-aged: #e0cfa8;
+
+  --samurai-red: #a23b3b;
+  --samurai-red-deep: #6b1a1a;
+  --samurai-red-bright: #c84545;
+  --blood-red: #8B0000;
+
+  --gold: #d4af37;
+  --gold-dark: #b8941f;
+  --gold-bright: #f2cd5e;
+
+  --sakura: #ffb7c5;
+  --sakura-light: #ffd4db;
+  --sakura-deep: #e08a9a;
+
+  --jade: #5a8a6b;
+  --jade-light: #8ab4a0;
+
+  --text-primary: #f4e8d0;
+  --text-secondary: #c0b090;
+  --text-muted: #8b7355;
+  --text-dim: #5a4a3a;
+
+  /* Surface */
+  --surface-1: rgba(10, 10, 13, 0.85);
+  --surface-2: rgba(26, 21, 18, 0.75);
+  --surface-3: rgba(42, 31, 28, 0.6);
+  --surface-hover: rgba(162, 59, 59, 0.15);
+  --surface-active: rgba(162, 59, 59, 0.25);
+
+  /* Borders */
+  --border-faint: rgba(212, 175, 55, 0.15);
+  --border-soft: rgba(212, 175, 55, 0.3);
+  --border-strong: rgba(212, 175, 55, 0.5);
+  --border-red: rgba(162, 59, 59, 0.4);
+
+  /* Status */
+  --success: #7bb866;
+  --warning: #d4a748;
+  --danger: #e87b7b;
+  --info: #7ba8d4;
+
+  /* Typography */
+  --font-th: 'Sarabun', 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-jp: 'Noto Serif JP', 'Yu Mincho', 'YuMincho', 'Hiragino Mincho ProN', serif;
+  --font-display: 'Yuji Syuku', 'Noto Serif JP', serif;
+  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+
+  /* Sizing */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+
+  /* Shadows (minimal, ink-like) */
+  --shadow-panel: 0 0 0 0.5px var(--border-soft), 0 4px 24px rgba(0,0,0,0.4);
+  --shadow-glow: 0 0 24px rgba(212, 175, 55, 0.25);
+  --shadow-red-glow: 0 0 16px rgba(162, 59, 59, 0.4);
+}
+
+/* ============================================================
+ * Base
+ * ============================================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--sumi-ink);
+  color: var(--text-primary);
+  font-family: var(--font-th);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+
+body {
+  min-height: 100vh;
+}
+
+/* ============================================================
+ * Typography
+ * ============================================================ */
+h1, h2, h3, h4, h5 {
+  font-family: var(--font-jp);
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: 1px;
+  margin: 0;
+}
+h1 { font-size: 28px; }
+h2 { font-size: 22px; }
+h3 { font-size: 18px; }
+
+.kanji-title {
+  font-family: var(--font-jp);
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 3px;
+  text-shadow: 0 0 16px rgba(212, 175, 55, 0.3);
+}
+
+.thai-heading {
+  font-family: var(--font-th);
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+}
+
+.label-jp {
+  font-family: var(--font-jp);
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 3px;
+  text-transform: none;
+}
+
+.label-th {
+  font-family: var(--font-th);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ============================================================
+ * Layout
+ * ============================================================ */
+.app-shell {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  grid-template-rows: 60px 1fr;
+  overflow: hidden;
+}
+
+.app-shell .bg-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.app-shell > .app-header,
+.app-shell > .app-sidebar,
+.app-shell > .app-main {
+  position: relative;
+  z-index: 1;
+}
+
+.app-header {
+  grid-column: 1 / 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  background: var(--surface-1);
+  backdrop-filter: blur(12px);
+  border-bottom: 0.5px solid var(--border-soft);
+}
+
+.app-sidebar {
+  padding: 20px 12px;
+  background: var(--surface-1);
+  backdrop-filter: blur(12px);
+  border-right: 0.5px solid var(--border-faint);
+  overflow-y: auto;
+}
+
+.app-main {
+  padding: 24px 32px;
+  overflow-y: auto;
+}
+
+/* ============================================================
+ * Navigation
+ * ============================================================ */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 2px;
+  font-family: var(--font-th);
+  font-size: 13px;
+  color: var(--text-secondary);
+  border-left: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.nav-item:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.nav-item.active {
+  background: var(--surface-active);
+  color: var(--text-primary);
+  border-left-color: var(--samurai-red);
+}
+.nav-item .icon {
+  font-size: 14px;
+  color: var(--gold);
+  width: 18px;
+  text-align: center;
+}
+
+.nav-section {
+  font-family: var(--font-jp);
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 3px;
+  padding: 12px 14px 6px;
+  margin-top: 8px;
+}
+
+/* ============================================================
+ * Card / Panel
+ * ============================================================ */
+.panel {
+  background: var(--surface-1);
+  backdrop-filter: blur(10px);
+  border: 0.5px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 0.5px solid var(--border-faint);
+}
+.panel-title {
+  font-family: var(--font-jp);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.panel-subtitle {
+  font-family: var(--font-th);
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.stat-card {
+  background: var(--surface-1);
+  border: 0.5px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+}
+.stat-card.warning { border-color: var(--border-red); }
+.stat-card .stat-jp { font-family: var(--font-jp); font-size: 10px; color: var(--text-muted); letter-spacing: 3px; }
+.stat-card .stat-label { font-size: 11px; color: var(--text-secondary); margin: 2px 0 8px; }
+.stat-card .stat-value { font-family: var(--font-jp); font-size: 28px; font-weight: 500; color: var(--gold); line-height: 1; }
+.stat-card.warning .stat-value { color: var(--danger); }
+.stat-card .stat-desc { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+/* ============================================================
+ * Buttons
+ * ============================================================ */
+button, .btn {
+  font-family: var(--font-th);
+  font-size: 13px;
+  padding: 10px 18px;
+  background: var(--surface-2);
+  color: var(--text-primary);
+  border: 0.5px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 0.5px;
+}
+button:hover, .btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+button:active, .btn:active {
+  transform: scale(0.98);
+}
+button:disabled, .btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: linear-gradient(180deg, var(--samurai-red) 0%, var(--samurai-red-deep) 100%);
+  border: 0.5px solid var(--gold);
+  color: var(--paper-cream);
+  font-weight: 500;
+  letter-spacing: 2px;
+}
+.btn-primary:hover {
+  background: linear-gradient(180deg, var(--samurai-red-bright) 0%, var(--samurai-red) 100%);
+  box-shadow: var(--shadow-red-glow);
+}
+
+.btn-gold {
+  background: linear-gradient(180deg, var(--gold) 0%, var(--gold-dark) 100%);
+  border: 0.5px solid var(--gold);
+  color: var(--sumi-ink);
+  font-weight: 600;
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 0.5px solid var(--border-soft);
+}
+
+.btn-danger {
+  background: transparent;
+  border: 0.5px solid var(--danger);
+  color: var(--danger);
+}
+
+/* ============================================================
+ * Form elements
+ * ============================================================ */
+input[type="text"], input[type="number"], input[type="password"],
+input[type="email"], input[type="url"], input[type="search"],
+select, textarea {
+  font-family: var(--font-th);
+  font-size: 13px;
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  border: 0.5px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color 0.15s;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--gold);
+  background: var(--surface-2);
+}
+input::placeholder, textarea::placeholder {
+  color: var(--text-dim);
+}
+textarea {
+  min-height: 72px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+label {
+  display: block;
+  font-family: var(--font-th);
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  height: 4px;
+  background: var(--surface-2);
+  border-radius: 2px;
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--gold);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid var(--sumi-ink);
+}
+
+/* ============================================================
+ * Badge / Pill
+ * ============================================================ */
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-family: var(--font-th);
+  border-radius: var(--radius-sm);
+  border: 0.5px solid;
+  letter-spacing: 0.5px;
+}
+.badge-success { background: rgba(123, 184, 102, 0.15); border-color: var(--success); color: var(--success); }
+.badge-warning { background: rgba(212, 167, 72, 0.15); border-color: var(--warning); color: var(--warning); }
+.badge-danger  { background: rgba(232, 123, 123, 0.15); border-color: var(--danger);  color: var(--danger); }
+.badge-info    { background: rgba(123, 168, 212, 0.15); border-color: var(--info);    color: var(--info); }
+.badge-gold    { background: rgba(212, 175, 55, 0.15);  border-color: var(--gold);    color: var(--gold); }
+
+.status-dot::before {
+  content: '●';
+  margin-right: 4px;
+}
+
+/* ============================================================
+ * Scrollbar
+ * ============================================================ */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--surface-hover); }
+
+/* ============================================================
+ * Animations
+ * ============================================================ */
+@keyframes sakura-fall {
+  0%   { transform: translate(0, -20px) rotate(0deg); opacity: 0; }
+  10%  { opacity: 0.85; }
+  90%  { opacity: 0.85; }
+  100% { transform: translate(var(--drift, 30px), 100vh) rotate(360deg); opacity: 0; }
+}
+@keyframes breathe {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  50% { transform: translateY(-1px) scaleY(1.015); }
+}
+@keyframes cape-sway {
+  0%, 100% { transform: skewX(-2deg); }
+  50% { transform: skewX(2deg); }
+}
+@keyframes moon-pulse {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 1; }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ink-reveal {
+  from { opacity: 0; filter: blur(4px); }
+  to { opacity: 1; filter: blur(0); }
+}
+.fade-in { animation: fade-in 0.3s ease-out; }
+.ink-reveal { animation: ink-reveal 0.5s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================
+ * Notification toast
+ * ============================================================ */
+.toast {
+  position: fixed;
+  top: 80px;
+  right: 24px;
+  max-width: 360px;
+  padding: 14px 18px;
+  background: var(--surface-1);
+  backdrop-filter: blur(12px);
+  border: 0.5px solid var(--border-soft);
+  border-left: 3px solid var(--gold);
+  border-radius: var(--radius-sm);
+  animation: fade-in 0.3s ease-out;
+  z-index: 1000;
+}
+.toast.success { border-left-color: var(--success); }
+.toast.warning { border-left-color: var(--warning); }
+.toast.danger  { border-left-color: var(--danger); }
+.toast-title { font-weight: 500; margin-bottom: 4px; }
+.toast-body { font-size: 12px; color: var(--text-secondary); }
+
+/* ============================================================
+ * Divider (Japanese style)
+ * ============================================================ */
+.jp-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: var(--text-muted);
+  font-family: var(--font-jp);
+  font-size: 11px;
+  letter-spacing: 3px;
+}
+.jp-divider::before, .jp-divider::after {
+  content: '';
+  flex: 1;
+  height: 0.5px;
+  background: var(--border-faint);
+}

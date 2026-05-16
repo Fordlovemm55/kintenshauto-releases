@@ -1,0 +1,131 @@
+name: Build Installer
+
+# Trigger: เมื่อ push tag ขึ้นต้นด้วย v (เช่น v1.0.0) หรือกดปุ่ม manual
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'สร้าง Release อัตโนมัติ?'
+        required: false
+        default: 'false'
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      # Linux: ติดตั้ง libs ที่ electron-builder ต้องใช้
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libnotify-dev libnss3-dev libxss1 libasound2-dev
+
+      - name: Install npm dependencies
+        run: npm install
+        env:
+          SKIP_POSTINSTALL: '1'  # ข้ามการโหลด FFmpeg/yt-dlp ตอน npm install (จะโหลดตอน build)
+
+      - name: Build frontend
+        run: npm run build-frontend
+        continue-on-error: true  # ถ้า build-frontend ไม่มี ข้ามได้
+
+      # Download dependencies (FFmpeg, yt-dlp, fpcalc) ก่อน package
+      - name: Download platform binaries
+        run: node scripts/download-deps.js
+        continue-on-error: true
+
+      # Build installer สำหรับแต่ละ OS
+      - name: Build Windows installer
+        if: matrix.os == 'windows-latest'
+        run: npm run dist:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build macOS installer
+        if: matrix.os == 'macos-latest'
+        run: npm run dist:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Linux installer
+        if: matrix.os == 'ubuntu-latest'
+        run: npm run dist:linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Upload artifacts เพื่อให้ดาวน์โหลดจาก GitHub Actions ได้
+      - name: Upload Windows artifacts
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: KINTENSHAUTO-Windows
+          path: |
+            dist-installer/*.exe
+            dist-installer/*.yml
+            dist-installer/*.blockmap
+          retention-days: 30
+
+      - name: Upload macOS artifacts
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: KINTENSHAUTO-macOS
+          path: |
+            dist-installer/*.dmg
+            dist-installer/*.yml
+            dist-installer/*.blockmap
+          retention-days: 30
+
+      - name: Upload Linux artifacts
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: KINTENSHAUTO-Linux
+          path: |
+            dist-installer/*.AppImage
+            dist-installer/*.yml
+          retention-days: 30
+
+      # ถ้า push tag → สร้าง GitHub Release พร้อมแนบไฟล์
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-installer/*.exe
+            dist-installer/*.dmg
+            dist-installer/*.AppImage
+            dist-installer/*.yml
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## KINTENSHAUTO · 剣天照 ${{ github.ref_name }}
+
+            ### ดาวน์โหลด
+            - **Windows**: `KINTENSHAUTO-Setup-*.exe`
+            - **macOS**: `KINTENSHAUTO-*.dmg`
+            - **Linux**: `KINTENSHAUTO-*.AppImage`
+
+            ### การติดตั้ง
+            ดูคู่มือใน [INSTALLATION.md](../blob/main/INSTALLATION.md)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
