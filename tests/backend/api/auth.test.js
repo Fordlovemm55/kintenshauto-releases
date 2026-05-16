@@ -30,7 +30,12 @@ beforeAll(async () => {
     }),
     http.post(`${SUPA_URL}/functions/v1/device-claim`, () =>
       HttpResponse.json({ status: 'claimed', is_takeover: false, session_token: 'tok-abc' })
-    )
+    ),
+    // Plan 2 Task 12: pullAll runs on login — return empty for all cloud_* tables
+    http.get(`${SUPA_URL}/rest/v1/:table`, ({ params }) => {
+      if (String(params.table).startsWith('cloud_')) return HttpResponse.json([]);
+      return HttpResponse.json([]);
+    })
   );
   mswServer.listen({ onUnhandledRequest: 'bypass' });
 

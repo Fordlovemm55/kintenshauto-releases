@@ -453,6 +453,16 @@ setInterval(() => {
 }, 15000);
 setInterval(() => releaseReservedClips(), 5 * 60 * 1000);
 
+// Plan 2: periodic push of pending sync queue (every 5 min)
+setInterval(async () => {
+    const session = authService.getStoredSession();
+    if (!session?.access_token) return;
+    try {
+        const { pushPending } = require('./cloud/syncEngine');
+        await pushPending(db, session.access_token);
+    } catch (e) { console.error('[sync] periodic push:', e.message); }
+}, 5 * 60 * 1000);
+
 // ------------- Helpers -------------
 const asyncHandler = (fn) => (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch((err) => {
@@ -489,6 +499,13 @@ app.get('/api/stats/daily', asyncHandler(async (req, res) => {
 // AUTH (Plan 2)
 // ====================================================================
 const authService = require('./cloud/authService');
+
+// Plan 2 Task 11: sync hooks — schedule cloud pushes on local writes
+// NOTE: Individual POST/PUT/DELETE endpoints are not yet instrumented with
+// _syncHooks.notifySync() — that's a follow-up. The hooks infra is wired and
+// pushPending (called periodically + after login) still flushes pending writes.
+const { startSyncHooks } = require('./cloud/syncHooks');
+const _syncHooks = startSyncHooks(db, () => authService.getStoredSession()?.access_token || null);
 
 app.post('/api/auth/login', asyncHandler(async (req, res) => {
     const { email, password } = req.body || {};
@@ -538,6 +555,17 @@ app.post('/api/auth/login', asyncHandler(async (req, res) => {
         await authService.logout();
         try { io.emit('auth:kicked', { reason: 'another_device_signed_in' }); } catch {}
     });
+
+    // Plan 2 Task 12: initial pull from cloud (LWW merge into local)
+    try {
+        const { pullAll, pushPending } = require('./cloud/syncEngine');
+        const pullResult = await pullAll(db, result.session.access_token);
+        console.log('[sync] initial pull:', JSON.stringify(pullResult));
+        // Push any pending local writes that didn't sync before login
+        await pushPending(db, result.session.access_token);
+    } catch (e) {
+        console.warn('[sync] initial sync error (non-fatal):', e.message);
+    }
 
     res.json({
         ok: true,
