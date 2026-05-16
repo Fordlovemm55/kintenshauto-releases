@@ -268,7 +268,7 @@ function _platformOf(db, profileId) {
 
 async function isLoggedIn(page, platform = 'facebook') {
     try {
-        const { getPlatformConfig } = require('./services/platformConfig');
+        const { getPlatformConfig } = require('../services/platformConfig');
         const cfg = getPlatformConfig(platform);
         await page.goto(cfg.loginUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
         await new Promise(r => setTimeout(r, 1500));
@@ -293,7 +293,7 @@ async function isLoggedIn(page, platform = 'facebook') {
 async function backupCookiesToDb(db, profileId, browser, platformOverride) {
     try {
         const platform = platformOverride || _platformOf(db, profileId);
-        const { isDomainForPlatform } = require('./services/platformConfig');
+        const { isDomainForPlatform } = require('../services/platformConfig');
         // browser.cookies() exists in Puppeteer 23+ and returns all cookies.
         // Fall back to page.cookies() per page if not supported.
         let allCookies = [];
@@ -380,7 +380,7 @@ async function restoreCookiesFromDb(db, profileId, browser) {
         }
         // Show login-cookie presence in log (platform-aware)
         try {
-            const { getPlatformConfig } = require('./services/platformConfig');
+            const { getPlatformConfig } = require('../services/platformConfig');
             const platform = _platformOf(db, profileId);
             const indicators = getPlatformConfig(platform).loginCookieNames || [];
             const present = indicators.filter(n => clean.some(c => c.name === n));

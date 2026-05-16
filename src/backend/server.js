@@ -246,7 +246,7 @@ const { CopyrightManager } = require('./services/copyrightManager');
 const { BannerPresetService } = require('./services/bannerLayerSystem');
 const { SessionManager } = require('./services/sessionManager');
 const { CoverService, DEFAULT_COVER_SYSTEM_PROMPT } = require('./services/coverService');
-const { Orchestrator } = require('./orchestrator');
+const { Orchestrator } = require('./core/orchestrator');
 
 const captionService = new CaptionService(DB_PATH);
 const commentEngine = new CommentTemplateEngine(DB_PATH);
@@ -357,12 +357,12 @@ const orchestrator = new Orchestrator({
 });
 
 // Inject DB into the shared browser manager so it can back up / restore FB cookies
-const browserManager = require('./browserManager');
+const browserManager = require('./core/browserManager');
 browserManager.setDb(db);
 
 // Background job worker loop — checks pending jobs every 15s
 const { runJobWorkerTick, releaseReservedClips, ensureSet2ForJob, preflightJob } =
-    require('./worker')(db, orchestrator, io, sessionMgr, DB_PATH);
+    require('./core/worker')(db, orchestrator, io, sessionMgr, DB_PATH);
 
 // STARTUP SAFETY: any job in 'running' or 'processing' status at startup is orphaned
 // — the pipeline/worker process that was handling it is gone (program was closed / crashed).
@@ -551,8 +551,8 @@ app.post('/api/profiles/:id/fetch-pages', asyncHandler(async (req, res) => {
         return res.json({ ...existing, deduped: true });
     }
 
-    const browserManager = require('./browserManager');
-    const { fetchManagedPages } = require('./poster');
+    const browserManager = require('./core/browserManager');
+    const { fetchManagedPages } = require('./core/poster');
 
     const task = (async () => {
         let browser;
@@ -615,7 +615,7 @@ app.post('/api/profiles/:id/fetch-pages', asyncHandler(async (req, res) => {
 // Check if Chrome is open for this profile + session backup status + count cookies
 // Platform-aware: uses profile.platform to pick the right login-cookie indicators
 app.get('/api/profiles/:id/browser-status', (req, res) => {
-    const browserManager = require('./browserManager');
+    const browserManager = require('./core/browserManager');
     const { getPlatformConfig } = require('./services/platformConfig');
     const profileRow = db.prepare('SELECT platform FROM profiles WHERE id = ?').get(req.params.id);
     const platform = profileRow?.platform || 'facebook';
@@ -658,8 +658,8 @@ app.post('/api/profiles/:id/sync-cookies', asyncHandler(async (req, res) => {
     const profile = db.prepare('SELECT * FROM profiles WHERE id = ?').get(req.params.id);
     if (!profile) throw notFound('ไม่พบบัญชีเฟส');
 
-    const browserManagerLocal = require('./browserManager');
-    const { launchForProfile, backupCookiesToDb } = require('./poster');
+    const browserManagerLocal = require('./core/browserManager');
+    const { launchForProfile, backupCookiesToDb } = require('./core/poster');
 
     // If our managed Chrome is already open, just back up — done
     const existing = browserManagerLocal.browsers.get(profile.id);
@@ -716,8 +716,8 @@ app.post('/api/profiles/:id/sync-cookies', asyncHandler(async (req, res) => {
 app.post('/api/profiles/:id/save-session', asyncHandler(async (req, res) => {
     const profile = db.prepare('SELECT * FROM profiles WHERE id = ?').get(req.params.id);
     if (!profile) throw notFound('ไม่พบบัญชีเฟส');
-    const { backupCookiesToDb } = require('./poster');
-    const browserManager = require('./browserManager');
+    const { backupCookiesToDb } = require('./core/poster');
+    const browserManager = require('./core/browserManager');
     const browser = browserManager.browsers.get(profile.id);
     if (!browser) {
         return res.status(400).json({ error: 'Chrome ยังไม่ได้เปิด — กด "เปิด Chrome" ก่อน' });
@@ -728,7 +728,7 @@ app.post('/api/profiles/:id/save-session', asyncHandler(async (req, res) => {
 
 // Close Chrome for this profile (user-triggered — Chrome flushes cookies on clean close)
 app.post('/api/profiles/:id/close-browser', asyncHandler(async (req, res) => {
-    const browserManager = require('./browserManager');
+    const browserManager = require('./core/browserManager');
     await browserManager.closeBrowser(Number(req.params.id));
     res.json({ ok: true });
 }));
@@ -739,7 +739,7 @@ app.post('/api/profiles/:id/login-chrome', asyncHandler(async (req, res) => {
     const profile = db.prepare('SELECT * FROM profiles WHERE id = ?').get(req.params.id);
     if (!profile) throw notFound('ไม่พบบัญชีเฟส');
 
-    const browserManager = require('./browserManager');
+    const browserManager = require('./core/browserManager');
 
     // If our Puppeteer-controlled Chrome is already running for this profile, close it first
     // (Chrome won't let two processes share the same userDataDir).
@@ -748,7 +748,7 @@ app.post('/api/profiles/:id/login-chrome', asyncHandler(async (req, res) => {
         await new Promise(r => setTimeout(r, 500));
     }
 
-    const { launchPlainChromeForLogin } = require('./poster');
+    const { launchPlainChromeForLogin } = require('./core/poster');
     const { getPlatformConfig } = require('./services/platformConfig');
     const platform = profile.platform || 'facebook';
     const startUrl = getPlatformConfig(platform).loginUrl;
@@ -766,8 +766,8 @@ app.post('/api/profiles/:id/test-login', asyncHandler(async (req, res) => {
     const profile = db.prepare('SELECT * FROM profiles WHERE id = ?').get(req.params.id);
     if (!profile) throw notFound('ไม่พบบัญชีเฟสที่เลือก (อาจถูกลบไปแล้ว)');
 
-    const browserManager = require('./browserManager');
-    const { isLoggedIn } = require('./poster');
+    const browserManager = require('./core/browserManager');
+    const { isLoggedIn } = require('./core/poster');
 
     browserManager.getBrowser(profile).then(async (browser) => {
         const page = await browser.newPage();
@@ -1202,7 +1202,7 @@ app.post('/api/pages/:id/test-composer', asyncHandler(async (req, res) => {
     const profile = db.prepare('SELECT * FROM profiles WHERE id = ?').get(page.profile_id);
     if (!profile) throw notFound('ไม่พบบัญชีเฟส');
 
-    const browserManager = require('./browserManager');
+    const browserManager = require('./core/browserManager');
     const browser = await browserManager.getBrowser(profile);
     const pup = await browser.newPage();
 
@@ -1650,7 +1650,7 @@ app.post('/api/clips/:id/re-render', asyncHandler(async (req, res) => {
     if (!clip.set1_path) {
         throw badRequest('คลิปนี้ยังไม่มี set1 (ยังไม่ได้ตัด/render ครั้งแรก) — กด "ทำคลิปต่อ" ก่อน');
     }
-    const { sliceClip, applyBannerOverlay } = require('./orchestrator');
+    const { sliceClip, applyBannerOverlay } = require('./core/orchestrator');
     const tmpRaw  = clip.set1_path + '.tmp_raw.mp4';
     const newOut  = clip.set1_path + '.new.mp4';
     const bakOrig = clip.set1_path + '.bak';      // ✅ FIX C5: rollback file
@@ -1895,7 +1895,7 @@ app.post('/api/scheduler/run-now', (req, res) => {
 
 // Expose peak slots so UI can explain to user why each clip is scheduled there
 app.get('/api/peak-slots', (req, res) => {
-    const { PEAK_SLOTS, planClipSchedule, friendlyThaiDate } = require('./peakSchedule');
+    const { PEAK_SLOTS, planClipSchedule, friendlyThaiDate } = require('./core/peakSchedule');
     res.json({
         slots: PEAK_SLOTS,
         // include a sample plan of next 5 slots for preview
@@ -1967,7 +1967,7 @@ app.post('/api/pipeline/start', asyncHandler(async (req, res) => {
 
     // Preview: compute when the FIRST clip will actually land so user can see it
     // before the pipeline runs (answers "ลงวันไหน?" without waiting).
-    const { planClipSchedule, friendlyThaiDate } = require('./peakSchedule');
+    const { planClipSchedule, friendlyThaiDate } = require('./core/peakSchedule');
     const previewPerPage = found.map(p => {
         const lastRow = db.prepare(`
             SELECT MAX(scheduled_at) AS t FROM jobs
@@ -2032,7 +2032,7 @@ app.post('/api/pipeline/preview-schedule', asyncHandler(async (req, res) => {
     if (!ids.length) throw badRequest('ต้องเลือกเพจอย่างน้อย 1 เพจ');
     if (ids.length > 50) throw badRequest('เลือกได้ไม่เกิน 50 เพจในครั้งเดียว');
     const n = Math.max(1, Number(clips_per_page) || Number(getSetting('default_clips_per_video', '4')));
-    const { planClipSchedule, friendlyThaiDate } = require('./peakSchedule');
+    const { planClipSchedule, friendlyThaiDate } = require('./core/peakSchedule');
 
     const placeholders = ids.map(() => '?').join(',');
     const pages = db.prepare(`
@@ -2076,7 +2076,7 @@ app.post('/api/pipeline/preview-schedule', asyncHandler(async (req, res) => {
 app.post('/api/scout', asyncHandler(async (req, res) => {
     const { keyword, limit, include_used } = req.body;
     if (!keyword) throw badRequest('กรอกคำค้นก่อน');
-    const { scoutBilibili } = require('./scout');
+    const { scoutBilibili } = require('./core/scout');
     const rawLimit = limit || 8;
     // Over-fetch a bit so we still have enough results after filtering duplicates
     const scoutLimit = include_used ? rawLimit : Math.max(rawLimit * 3, 20);

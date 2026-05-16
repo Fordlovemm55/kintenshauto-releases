@@ -61,7 +61,7 @@ class BrowserManager {
                 // Hook up cookie-capture listeners on EVERY page (existing + new)
                 // Platform-aware: filter URLs to profile.platform's domains (default 'facebook' for legacy rows)
                 if (this.db) {
-                    const { isUrlForPlatform } = require('./services/platformConfig');
+                    const { isUrlForPlatform } = require('../services/platformConfig');
                     const profilePlatform = profile.platform || 'facebook';
                     const attachToPage = (page) => {
                         if (!page) return;

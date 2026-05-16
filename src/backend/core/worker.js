@@ -18,8 +18,8 @@ const { toSqlLocal, nextPeakSlotAfter } = require('./peakSchedule');
 module.exports = function createWorker(db, orchestrator, io, sessionMgr, dbPath) {
     const { postReel, warmUpSession, isLoggedIn, humanDelay, humanType } = require('./poster');
     const browserManager = require('./browserManager');
-    const { CopyrightManager } = require('./services/copyrightManager');
-    const { CommentTemplateEngine } = require('./services/commentTemplateEngine');
+    const { CopyrightManager } = require('../services/copyrightManager');
+    const { CommentTemplateEngine } = require('../services/commentTemplateEngine');
 
     const copyrightMgr = new CopyrightManager(dbPath);
     const commentEngine = new CommentTemplateEngine(dbPath);

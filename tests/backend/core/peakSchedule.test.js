@@ -5,7 +5,7 @@ import {
   planClipSchedule,
   toSqlLocal,
   friendlyThaiDate
-} from '../../../src/backend/peakSchedule.js';
+} from '../../../src/backend/core/peakSchedule.js';
 
 describe('peakSchedule', () => {
   describe('PEAK_SLOTS', () => {
