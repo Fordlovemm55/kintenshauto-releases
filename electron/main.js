@@ -152,7 +152,14 @@ function createSplash() {
             sandbox: true
         }
     });
-    splashWindow.loadFile(path.join(__dirname, 'splash.html')).catch(e => logError('splash load: ' + e.message));
+    splashWindow.loadFile(path.join(__dirname, 'splash.html')).then(() => {
+        // Inject the real app version into the splash status text — splash.html
+        // ships with an empty placeholder so we never display a stale literal.
+        const v = JSON.stringify(`v${app.getVersion()}`);
+        splashWindow?.webContents.executeJavaScript(
+            `const el = document.getElementById('app-version'); if (el) el.textContent = ${v};`
+        ).catch(() => {});
+    }).catch(e => logError('splash load: ' + e.message));
     splashWindow.once('closed', () => { splashWindow = null; });
 }
 
@@ -169,12 +176,14 @@ function createMainWindow() {
     mainWindow = new BrowserWindow({
         width: 1440,
         height: 900,
-        minWidth: 1200,
-        minHeight: 720,
+        // Reduced so the app is usable on small laptop screens; CSS handles
+        // sidebar collapse + modal stacking below 900px / 768px breakpoints.
+        minWidth: 600,
+        minHeight: 480,
         show: false,
         icon: fs.existsSync(iconPath) ? iconPath : undefined,
         backgroundColor: '#0a0a0d',
-        title: 'KINTENSHAUTO · 剣天照',
+        title: `KINTENSHAUTO · 剣天照 · v${app.getVersion()}`,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -506,6 +515,14 @@ ipcMain.handle('app:openLogs', () => shell.openPath(LOG_DIR));
 // ---- Auto-updater (only enabled when a publish URL is configured at build time) ----
 function setupAutoUpdater() {
     if (!app.isPackaged) return;
+    // Private GitHub release auth — electron-updater reads GH_TOKEN automatically
+    // for the GitHub provider. Embedded here because users can't pre-set the env
+    // var. Token is scoped to read-only on a single private release repo, so
+    // exposure risk is "anyone with the installer can list/download our release
+    // artifacts" — acceptable for an internal-distribution tool.
+    if (!process.env.GH_TOKEN) {
+        process.env.GH_TOKEN = 'REDACTED_GH_PAT';
+    }
     let autoUpdater;
     try {
         ({ autoUpdater } = require('electron-updater'));
@@ -520,17 +537,42 @@ function setupAutoUpdater() {
         return;
     }
     autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = false;
+    // Skip Authenticode publisher verification — installer is unsigned (no cert
+    // purchased yet). Without this override, electron-updater refuses to run
+    // the downloaded installer with "New version is not signed by the
+    // application owner". Safe because the GitHub release we fetch from is
+    // authenticated via the embedded PAT (private repo).
+    autoUpdater.verifyUpdateCodeSignature = () => Promise.resolve(null);
     autoUpdater.on('update-available', (info) => {
         try { mainWindow?.webContents.send('update:available', info); } catch {}
+    });
+    autoUpdater.on('update-not-available', () => {
+        try { mainWindow?.webContents.send('update:not-available'); } catch {}
+    });
+    autoUpdater.on('download-progress', (p) => {
+        try { mainWindow?.webContents.send('update:progress', {
+            percent: p.percent,
+            transferred: p.transferred,
+            total: p.total,
+            bytesPerSecond: p.bytesPerSecond
+        }); } catch {}
     });
     autoUpdater.on('update-downloaded', (info) => {
         try { mainWindow?.webContents.send('update:downloaded', info); } catch {}
     });
-    autoUpdater.on('error', (err) => logError('Update error: ' + err.message));
-    setTimeout(() => {
-        autoUpdater.checkForUpdates().catch(e => logError('Update check: ' + e.message));
-    }, 10000);
+    autoUpdater.on('error', (err) => {
+        logError('Update error: ' + err.message);
+        try { mainWindow?.webContents.send('update:error', err.message); } catch {}
+    });
+    const checkUpdates = () => autoUpdater.checkForUpdates()
+        .catch(e => logError('Update check: ' + e.message));
+    setTimeout(checkUpdates, 3000);
+    // Re-check every 5 minutes so a new release shows up without a restart.
+    const updaterInterval = setInterval(checkUpdates, 5 * 60 * 1000);
+    if (typeof updaterInterval.unref === 'function') updaterInterval.unref();
 
+    ipcMain.handle('update:check', () => autoUpdater.checkForUpdates());
     ipcMain.handle('update:download', () => autoUpdater.downloadUpdate());
     ipcMain.handle('update:install', () => autoUpdater.quitAndInstall());
 }
@@ -543,7 +585,7 @@ function setupCloudVersionCheck() {
         // Skip in dev mode unless explicitly enabled.
         return;
     }
-    setTimeout(async () => {
+    const runCheck = async () => {
         try {
             const http = require('http');
             const result = await new Promise((resolve) => {
@@ -570,7 +612,12 @@ function setupCloudVersionCheck() {
                 try { mainWindow?.webContents.send('cloud-update:soft', result.soft_update); } catch {}
             }
         } catch (e) { logError('cloud version check: ' + e.message); }
-    }, 15000); // 15s after app launch
+    };
+    // Initial check ~3s after launch, then re-poll every 5 minutes so a new
+    // release surfaces without the user having to restart the app.
+    setTimeout(runCheck, 3000);
+    const cloudInterval = setInterval(runCheck, 5 * 60 * 1000);
+    if (typeof cloudInterval.unref === 'function') cloudInterval.unref();
 }
 
 const gotLock = app.requestSingleInstanceLock();

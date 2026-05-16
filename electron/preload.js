@@ -43,6 +43,17 @@ contextBridge.exposeInMainWorld('kintenshauto', {
         ipcRenderer.on('update:downloaded', listener);
         return () => ipcRenderer.removeListener('update:downloaded', listener);
     },
+    onUpdateProgress: (cb) => {
+        const listener = (_, info) => { try { cb(info); } catch {} };
+        ipcRenderer.on('update:progress', listener);
+        return () => ipcRenderer.removeListener('update:progress', listener);
+    },
+    onUpdateError: (cb) => {
+        const listener = (_, msg) => { try { cb(msg); } catch {} };
+        ipcRenderer.on('update:error', listener);
+        return () => ipcRenderer.removeListener('update:error', listener);
+    },
+    checkUpdate: () => ipcRenderer.invoke('update:check'),
     downloadUpdate: () => ipcRenderer.invoke('update:download'),
     installUpdate: () => ipcRenderer.invoke('update:install'),
     onCloudUpdateForce: (cb) => {
