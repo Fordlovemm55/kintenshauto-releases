@@ -193,8 +193,64 @@ applyMigrations(db, [
     { table: 'scouted_videos', column: 'thumbnail_local_path', definition: 'TEXT' },
     { table: 'caption_prompts', column: 'selected_model', definition: 'TEXT' },
     { table: 'profiles',       column: 'platform', definition: "TEXT NOT NULL DEFAULT 'facebook'" },
-    { table: 'profiles',       column: 'account_handle', definition: 'TEXT' }
+    { table: 'profiles',       column: 'account_handle', definition: 'TEXT' },
+    // Plan 2: sync columns for cloud bidirectional sync.
+    // NOTE: SQLite's ALTER TABLE ADD COLUMN cannot add UNIQUE constraints or
+    // non-constant defaults (CURRENT_TIMESTAMP). We add plain TEXT/DATETIME
+    // columns here, then create unique indexes + backfill below.
+    { table: 'pages',             column: 'cloud_uuid', definition: 'TEXT' },
+    { table: 'pages',             column: 'cloud_synced_at', definition: 'DATETIME' },
+    { table: 'pages',             column: 'updated_at', definition: 'DATETIME' },
+    { table: 'pages',             column: 'deleted_at', definition: 'DATETIME' },
+    { table: 'banners',           column: 'cloud_uuid', definition: 'TEXT' },
+    { table: 'banners',           column: 'cloud_synced_at', definition: 'DATETIME' },
+    { table: 'banners',           column: 'updated_at', definition: 'DATETIME' },
+    { table: 'banners',           column: 'deleted_at', definition: 'DATETIME' },
+    { table: 'banner_presets',    column: 'cloud_uuid', definition: 'TEXT' },
+    { table: 'banner_presets',    column: 'cloud_synced_at', definition: 'DATETIME' },
+    { table: 'banner_presets',    column: 'updated_at', definition: 'DATETIME' },
+    { table: 'banner_presets',    column: 'deleted_at', definition: 'DATETIME' },
+    { table: 'caption_prompts',   column: 'cloud_uuid', definition: 'TEXT' },
+    { table: 'caption_prompts',   column: 'cloud_synced_at', definition: 'DATETIME' },
+    { table: 'caption_prompts',   column: 'updated_at', definition: 'DATETIME' },
+    { table: 'caption_prompts',   column: 'deleted_at', definition: 'DATETIME' },
+    { table: 'comment_templates', column: 'cloud_uuid', definition: 'TEXT' },
+    { table: 'comment_templates', column: 'cloud_synced_at', definition: 'DATETIME' },
+    { table: 'comment_templates', column: 'updated_at', definition: 'DATETIME' },
+    { table: 'comment_templates', column: 'deleted_at', definition: 'DATETIME' },
+    { table: 'comment_settings',  column: 'cloud_uuid', definition: 'TEXT' },
+    { table: 'comment_settings',  column: 'cloud_synced_at', definition: 'DATETIME' },
+    { table: 'comment_settings',  column: 'updated_at', definition: 'DATETIME' },
+    { table: 'comment_settings',  column: 'deleted_at', definition: 'DATETIME' },
+    { table: 'watched_channels',  column: 'cloud_uuid', definition: 'TEXT' },
+    { table: 'watched_channels',  column: 'cloud_synced_at', definition: 'DATETIME' },
+    { table: 'watched_channels',  column: 'updated_at', definition: 'DATETIME' },
+    { table: 'watched_channels',  column: 'deleted_at', definition: 'DATETIME' },
+    { table: 'ai_providers',      column: 'cloud_uuid', definition: 'TEXT' },
+    { table: 'ai_providers',      column: 'cloud_synced_at', definition: 'DATETIME' },
+    { table: 'ai_providers',      column: 'updated_at', definition: 'DATETIME' },
+    { table: 'ai_providers',      column: 'deleted_at', definition: 'DATETIME' }
 ]);
+
+// Plan 2: post-migration steps that ALTER TABLE ADD COLUMN cannot do directly.
+//   1. UNIQUE constraint on cloud_uuid — emulated via partial UNIQUE INDEX
+//      (partial so multiple rows with NULL cloud_uuid don't collide)
+//   2. Backfill updated_at on existing rows (was NULL after ALTER ADD COLUMN)
+const SYNCED_TABLES = [
+    'pages', 'banners', 'banner_presets', 'caption_prompts',
+    'comment_templates', 'comment_settings', 'watched_channels', 'ai_providers'
+];
+for (const t of SYNCED_TABLES) {
+    try {
+        db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_${t}_cloud_uuid ON ${t}(cloud_uuid) WHERE cloud_uuid IS NOT NULL`);
+    } catch (e) {
+        console.warn(`[migration] unique index for ${t}.cloud_uuid failed:`, e.message);
+    }
+    try {
+        const r = db.prepare(`UPDATE ${t} SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL`).run();
+        if (r.changes > 0) console.log(`[migration] backfilled ${r.changes} ${t}.updated_at row(s)`);
+    } catch (e) { /* table might not exist on very old installs */ }
+}
 
 // One-time upgrade: old Gemini default "gemini-2.0-flash" is EOL → swap to gemini-2.5-flash
 // (preserved from original server.js — must run AFTER applyMigrations so caption_prompts.selected_model exists)
@@ -428,6 +484,71 @@ app.get('/api/stats/daily', asyncHandler(async (req, res) => {
         pending_reviews: pendingReviews.n
     });
 }));
+
+// ====================================================================
+// AUTH (Plan 2)
+// ====================================================================
+const authService = require('./cloud/authService');
+
+app.post('/api/auth/login', asyncHandler(async (req, res) => {
+    const { email, password } = req.body || {};
+    if (!email || !password) {
+        return res.status(400).json({ ok: false, error: 'email and password required' });
+    }
+    const result = await authService.login(email, password);
+    if (!result.ok) {
+        const status = result.reason === 'invalid_credentials' ? 401
+                     : result.reason === 'network_error' ? 503
+                     : result.reason === 'not_configured' ? 503
+                     : 400;
+        return res.status(status).json({ ok: false, reason: result.reason, error: result.message });
+    }
+    res.json({ ok: true, user: result.user });
+}));
+
+app.post('/api/auth/logout', asyncHandler(async (req, res) => {
+    await authService.logout();
+    res.json({ ok: true });
+}));
+
+app.get('/api/auth/status', (req, res) => {
+    const session = authService.getStoredSession();
+    if (!session) return res.json({ logged_in: false });
+    res.json({
+        logged_in: true,
+        user: { id: session.user?.id, email: session.user?.email },
+        expires_at: session.expires_at
+    });
+});
+
+app.post('/api/auth/refresh', asyncHandler(async (req, res) => {
+    const result = await authService.refresh();
+    if (!result.ok) {
+        return res.status(401).json({ ok: false, reason: result.reason });
+    }
+    res.json({ ok: true });
+}));
+
+// ====================================================================
+// REQUIRE AUTH MIDDLEWARE (Plan 2)
+// Blocks /api/* unless a local Supabase session exists.
+// Exempt: /api/health, /api/auth/*, /api/version/*
+// ====================================================================
+app.use((req, res, next) => {
+    if (!req.path.startsWith('/api/')) return next();
+    if (req.path === '/api/health'
+        || req.path.startsWith('/api/auth/')
+        || req.path.startsWith('/api/version/')) {
+        return next();
+    }
+    const session = authService.getStoredSession();
+    if (!session) {
+        return res.status(401).json({ error: 'login required', code: 'NO_SESSION' });
+    }
+    req.user = session.user;
+    req.accessToken = session.access_token;
+    next();
+});
 
 // ====================================================================
 // PROFILES

@@ -35,6 +35,11 @@ CREATE TABLE IF NOT EXISTS pages (
     niche           TEXT,                        -- เช่น "ซีรีย์จีน" ใช้กับ AI prompt
     enabled         INTEGER DEFAULT 1,
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- Plan 2 sync columns
+    cloud_uuid      TEXT UNIQUE,
+    cloud_synced_at DATETIME,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at      DATETIME,
     FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
 );
 
@@ -45,7 +50,12 @@ CREATE TABLE IF NOT EXISTS banners (
     file_path       TEXT NOT NULL,               -- path รูป
     width_px        INTEGER,
     height_px       INTEGER,
-    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- Plan 2 sync columns
+    cloud_uuid      TEXT UNIQUE,
+    cloud_synced_at DATETIME,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at      DATETIME
 );
 
 -- ---------- 4. BANNER PRESETS (config การวาง) ----------
@@ -53,7 +63,12 @@ CREATE TABLE IF NOT EXISTS banner_presets (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     name            TEXT NOT NULL,               -- "Telegram + โปรโมท ฿99"
     layers_json     TEXT NOT NULL,               -- array ของ layer config (unlimited)
-    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- Plan 2 sync columns
+    cloud_uuid      TEXT UNIQUE,
+    cloud_synced_at DATETIME,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at      DATETIME
 );
 -- layers_json structure:
 -- [
@@ -77,6 +92,11 @@ CREATE TABLE IF NOT EXISTS comment_templates (
     enabled         INTEGER DEFAULT 1,
     weight          INTEGER DEFAULT 1,           -- น้ำหนักสำหรับสุ่ม (ยิ่งสูง ยิ่งโอกาสมาก)
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- Plan 2 sync columns
+    cloud_uuid      TEXT UNIQUE,
+    cloud_synced_at DATETIME,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at      DATETIME,
     FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE CASCADE
 );
 
@@ -91,6 +111,11 @@ CREATE TABLE IF NOT EXISTS comment_settings (
     enable_self_reply   INTEGER DEFAULT 0,
     enable_pin          INTEGER DEFAULT 0,
     detect_removal      INTEGER DEFAULT 1,
+    -- Plan 2 sync columns
+    cloud_uuid          TEXT UNIQUE,
+    cloud_synced_at     DATETIME,
+    updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at          DATETIME,
     FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE CASCADE
 );
 
@@ -102,7 +127,12 @@ CREATE TABLE IF NOT EXISTS ai_providers (
     model           TEXT NOT NULL,               -- gpt-4o | claude-opus-4-7 | gemini-2.0
     label           TEXT,                        -- user-friendly name
     enabled         INTEGER DEFAULT 1,
-    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- Plan 2 sync columns
+    cloud_uuid      TEXT UNIQUE,
+    cloud_synced_at DATETIME,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at      DATETIME
 );
 
 -- ---------- 8. CAPTION PROMPTS (ต่อเพจ) ----------
@@ -114,6 +144,11 @@ CREATE TABLE IF NOT EXISTS caption_prompts (
     user_prompt     TEXT NOT NULL,               -- template with {video_title}, {niche}, etc.
     max_tokens      INTEGER DEFAULT 200,
     temperature     REAL DEFAULT 0.8,
+    -- Plan 2 sync columns
+    cloud_uuid      TEXT UNIQUE,
+    cloud_synced_at DATETIME,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at      DATETIME,
     FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE CASCADE,
     FOREIGN KEY (ai_provider_id) REFERENCES ai_providers(id)
 );
@@ -238,7 +273,12 @@ CREATE TABLE IF NOT EXISTS watched_channels (
     enabled             INTEGER DEFAULT 1,
     error_count         INTEGER DEFAULT 0,
     last_error          TEXT,
-    created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- Plan 2 sync columns
+    cloud_uuid          TEXT UNIQUE,
+    cloud_synced_at     DATETIME,
+    updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at          DATETIME
 );
 
 -- 16b. WATCHED_CHANNEL_PAGES (junction: 1 ช่อง → หลายเพจ)
@@ -323,3 +363,16 @@ CREATE TABLE IF NOT EXISTS audit_queue (
     flushed_at  DATETIME
 );
 CREATE INDEX IF NOT EXISTS idx_audit_queue_unflushed ON audit_queue(flushed_at) WHERE flushed_at IS NULL;
+
+-- =============================================================================
+-- Plan 2: triggers to bump updated_at on every UPDATE for synced tables
+-- WHEN clause prevents recursive trigger when our own UPDATE sets updated_at
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS trg_pages_updated_at             AFTER UPDATE ON pages             FOR EACH ROW WHEN NEW.updated_at = OLD.updated_at BEGIN UPDATE pages             SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+CREATE TRIGGER IF NOT EXISTS trg_banners_updated_at           AFTER UPDATE ON banners           FOR EACH ROW WHEN NEW.updated_at = OLD.updated_at BEGIN UPDATE banners           SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+CREATE TRIGGER IF NOT EXISTS trg_banner_presets_updated_at    AFTER UPDATE ON banner_presets    FOR EACH ROW WHEN NEW.updated_at = OLD.updated_at BEGIN UPDATE banner_presets    SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+CREATE TRIGGER IF NOT EXISTS trg_caption_prompts_updated_at   AFTER UPDATE ON caption_prompts   FOR EACH ROW WHEN NEW.updated_at = OLD.updated_at BEGIN UPDATE caption_prompts   SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+CREATE TRIGGER IF NOT EXISTS trg_comment_templates_updated_at AFTER UPDATE ON comment_templates FOR EACH ROW WHEN NEW.updated_at = OLD.updated_at BEGIN UPDATE comment_templates SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+CREATE TRIGGER IF NOT EXISTS trg_comment_settings_updated_at  AFTER UPDATE ON comment_settings  FOR EACH ROW WHEN NEW.updated_at = OLD.updated_at BEGIN UPDATE comment_settings  SET updated_at = CURRENT_TIMESTAMP WHERE page_id = NEW.page_id; END;
+CREATE TRIGGER IF NOT EXISTS trg_watched_channels_updated_at  AFTER UPDATE ON watched_channels  FOR EACH ROW WHEN NEW.updated_at = OLD.updated_at BEGIN UPDATE watched_channels  SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+CREATE TRIGGER IF NOT EXISTS trg_ai_providers_updated_at      AFTER UPDATE ON ai_providers      FOR EACH ROW WHEN NEW.updated_at = OLD.updated_at BEGIN UPDATE ai_providers      SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
