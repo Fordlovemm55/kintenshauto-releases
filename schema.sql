@@ -311,3 +311,15 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
   ('cover_enabled',               '0'),
   -- Chrome path override (ว่างไว้ → ใช้ auto-detect ของ poster.js)
   ('chrome_executable_path',      '');
+
+-- =============================================================================
+-- 19. AUDIT QUEUE — buffer for cloud audit_log events when offline (Plan 2)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS audit_queue (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    event       TEXT NOT NULL,
+    detail_json TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    flushed_at  DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_audit_queue_unflushed ON audit_queue(flushed_at) WHERE flushed_at IS NULL;
