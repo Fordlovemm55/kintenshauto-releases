@@ -67,14 +67,20 @@ describe('applyMigrations', () => {
     const { db } = openDatabase(dbPath);
     db.exec(`CREATE TABLE pages (id INTEGER PRIMARY KEY)`);
 
-    // Bad type will throw on the first migration; the second must still run
+    // First migration targets a table that doesn't exist — ALTER TABLE throws.
+    // applyMigrations must catch the error and proceed to the second migration.
     applyMigrations(db, [
-      { table: 'pages', column: 'bad_col', definition: 'INVALID_TYPE_XYZ' },
-      { table: 'pages', column: 'good_col', definition: 'TEXT' }
+      { table: 'no_such_table', column: 'x', definition: 'TEXT' },
+      { table: 'pages',         column: 'good_col', definition: 'TEXT' }
     ]);
 
     const cols = db.prepare(`PRAGMA table_info(pages)`).all().map(c => c.name);
     expect(cols).toContain('good_col');
+
+    // Confirm the bad migration didn't somehow create the table
+    const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map(t => t.name);
+    expect(tables).not.toContain('no_such_table');
+
     db.close();
   });
 });

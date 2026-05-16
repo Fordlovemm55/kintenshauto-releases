@@ -39,7 +39,7 @@ const cron = require('node-cron');
 // (ดู worker.js stale-pending sweep, orchestrator schedule, etc.)
 let toSqlLocal;
 try {
-    ({ toSqlLocal } = require('../peakSchedule'));
+    ({ toSqlLocal } = require('../core/peakSchedule'));
 } catch {
     toSqlLocal = (date) => {
         const pad = n => String(n).padStart(2, '0');
@@ -52,7 +52,7 @@ try {
 let orchHashUrl, orchCanonicalUrl, orchFfprobeDuration;
 try {
     ({ hashUrl: orchHashUrl, canonicalUrl: orchCanonicalUrl,
-       ffprobeDuration: orchFfprobeDuration } = require('../orchestrator'));
+       ffprobeDuration: orchFfprobeDuration } = require('../core/orchestrator'));
 } catch {
     const cryptoMod = require('crypto');
     orchCanonicalUrl = (url) => {
