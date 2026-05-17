@@ -2715,7 +2715,10 @@ const ALLOWED_SETTING_KEYS = new Set([
     'chrome_executable_path',  // user override for Chrome path (empty = auto-detect)
     'watcher_auto_edit_enabled', // '1' = slice + banner ปกติ, '0' = โพสต์ raw clip ตรงๆ
     'close_to_tray',           // '1' (default) = close window hides to tray · '0' = quit on close
-    'chrome_headless'          // '0' (default) = Chrome ปรากฏ · '1' = ทำงานเบื้องหลัง (headless)
+    'chrome_headless',         // '0' (default) = Chrome ปรากฏ · '1' = ทำงานเบื้องหลัง (headless)
+    'caption_mode',            // 'ai' (default) | 'template' | 'source_title' | 'off' — see captionService
+    'caption_template',        // template string used when caption_mode='template' (supports {video_title} etc.)
+    'caption_emoji_pool'       // comma-separated emoji rotated into {emoji} placeholder
 ]);
 
 // Mirror window-affecting settings to a tiny JSON file that the main Electron

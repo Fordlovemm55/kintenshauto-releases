@@ -326,7 +326,94 @@ class CaptionService {
         this.db.pragma('foreign_keys = ON');   // ✅ FIX H1: per-connection cascade enable
     }
 
+    /**
+     * Caption generation mode — read from settings table.
+     *   'ai' (default)    → call OpenAI/Anthropic/Gemini (existing behavior)
+     *   'template'        → render `caption_template` setting with variable
+     *                       substitution + emoji rotation. NO API call, FREE.
+     *   'source_title'    → just "{video_title} EP.{n} {emoji}". NO API call.
+     *   'off'             → empty string. Worker may skip the post entirely.
+     */
+    _getCaptionMode() {
+        try {
+            const row = this.db.prepare(
+                `SELECT value FROM settings WHERE key = 'caption_mode'`
+            ).get();
+            const v = (row?.value || '').toLowerCase();
+            return ['ai', 'template', 'source_title', 'off'].includes(v) ? v : 'ai';
+        } catch { return 'ai'; }
+    }
+
+    _getSetting(key) {
+        try { return this.db.prepare(`SELECT value FROM settings WHERE key = ?`).get(key)?.value || ''; }
+        catch { return ''; }
+    }
+
+    /**
+     * Render a template string with {var} substitution. No AI involved.
+     * Variables filled from videoContext + the page row:
+     *   {video_title}      full title
+     *   {video_title_short} first 80 chars + … if longer
+     *   {clip_number}      EP number
+     *   {total_clips}      total EPs in the set
+     *   {channel_label}    Watcher channel label (if from watcher)
+     *   {page_name}        FB page name
+     *   {niche}            page niche
+     *   {emoji}            random from caption_emoji_pool (or default set)
+     *   {emoji2}, {emoji3} additional random picks (different positions)
+     */
+    _renderTemplate(template, videoContext, pageRow) {
+        const emojiPool = (this._getSetting('caption_emoji_pool')
+            || '🎬,🔥,✨,📺,⚡,💥,🌟,🎥,🎞,🎟').split(',').map(s => s.trim()).filter(Boolean);
+        const pickEmoji = () => emojiPool[Math.floor(Math.random() * emojiPool.length)] || '';
+
+        const title = String(videoContext.videoTitle || pageRow?.niche || 'คลิปดี');
+        const vars = {
+            video_title: title,
+            video_title_short: title.length > 80 ? title.slice(0, 80) + '…' : title,
+            clip_number: videoContext.clipNumber || 1,
+            total_clips: videoContext.totalClips || 1,
+            channel_label: videoContext.channelLabel || '',
+            page_name: pageRow?.name || '',
+            niche: pageRow?.niche || '',
+            emoji: pickEmoji(),
+            emoji2: pickEmoji(),
+            emoji3: pickEmoji(),
+        };
+        return String(template || '').replace(/\{(\w+)\}/g, (m, k) => k in vars ? String(vars[k]) : m);
+    }
+
+    /**
+     * No-AI caption path — used when caption_mode is template / source_title / off.
+     * Returns a deterministic string built from local data; never calls an API.
+     */
+    _buildNonAICaption(mode, pageId, videoContext) {
+        if (mode === 'off') return '';
+        const pageRow = pageId
+            ? this.db.prepare('SELECT * FROM pages WHERE id = ?').get(pageId)
+            : null;
+        if (mode === 'source_title') {
+            const title = (videoContext.videoTitle || 'ซีรีย์น่าดู').slice(0, 100);
+            const ep = videoContext.clipNumber ? ` EP.${videoContext.clipNumber}` : '';
+            return this._renderTemplate(`${title}${ep} {emoji}`, videoContext, pageRow);
+        }
+        // 'template'
+        const tpl = this._getSetting('caption_template')
+            || '{video_title}{? EP.{clip_number}} {emoji}\n#ซีรีย์ #คลิปดี';
+        return this._renderTemplate(tpl, videoContext, pageRow);
+    }
+
     async generateForPage(pageId, videoContext) {
+        // Non-AI modes short-circuit BEFORE any DB lookup of providers / prompts.
+        // Lets the user run the whole pipeline with zero API spend.
+        const mode = this._getCaptionMode();
+        if (mode !== 'ai') {
+            return this._buildNonAICaption(mode, pageId, videoContext);
+        }
+        return this._generateForPageAI(pageId, videoContext);
+    }
+
+    async _generateForPageAI(pageId, videoContext) {
         // Prompt lookup stays the same — page-specific wins over the default.
         const promptRow = this.db.prepare(`
             SELECT cp.*, ap.provider, ap.api_key, ap.model, ap.label
@@ -440,6 +527,15 @@ class CaptionService {
      * - ไม่แตะ caption_prompts table — แยก scope ผ่าน settings
      */
     async generateForWatcher(pageId, videoContext) {
+        // Honor the global caption_mode toggle — if user disabled AI, the
+        // watcher path also goes through the template/source_title/off branch
+        // (NOT just the page-prompt path). Otherwise approving from the watcher
+        // would still burn API credits even with "AI off" selected.
+        const mode = this._getCaptionMode();
+        if (mode !== 'ai') {
+            return this._buildNonAICaption(mode, pageId, videoContext);
+        }
+
         const getSetting = (key) => {
             try { return this.db.prepare(`SELECT value FROM settings WHERE key = ?`).get(key)?.value; }
             catch { return null; }
@@ -451,7 +547,7 @@ class CaptionService {
         // ถ้าไม่ได้ตั้ง prompt watcher → fall back ใช้ prompt หลัก
         if (!wSystem && !wUser) {
             console.log('[captionService] watcher prompts empty — falling back to main caption flow');
-            return this.generateForPage(pageId, videoContext);
+            return this._generateForPageAI(pageId, videoContext);
         }
 
         // model selection (แชร์ logic กับ generateForPage)

@@ -37,6 +37,25 @@ const SETTING_GROUPS = [
     ]
   },
   {
+    title: 'แคปชั่น (AI หรือ Template)', jp: '字幕',
+    items: [
+      { key: 'caption_mode', label: 'โหมดสร้างแคปชั่น', type: 'select',
+        options: [
+          { value: 'ai',           label: 'ใช้ AI (default — ต้องตั้ง API key)' },
+          { value: 'template',     label: 'Template เอง (ฟรี — ไม่ใช้ AI)' },
+          { value: 'source_title', label: 'ใช้ชื่อวิดีโอต้นฉบับ + emoji (ฟรี)' },
+          { value: 'off',          label: 'ปิด — ไม่มีแคปชั่น (caption ว่าง)' },
+        ],
+        desc: '"ใช้ AI" จะเรียก OpenAI/Anthropic/Gemini · "Template" / "ใช้ชื่อวิดีโอ" / "ปิด" ไม่เสีย API เลย' },
+      { key: 'caption_template', label: 'Template สำหรับโหมด Template', type: 'textarea',
+        placeholder: '{video_title} {emoji} EP.{clip_number}\n#ซีรีย์ #คลิปดี',
+        desc: 'ตัวแปรที่ใช้ได้: {video_title} {video_title_short} {clip_number} {total_clips} {channel_label} {page_name} {niche} {emoji} {emoji2} {emoji3}' },
+      { key: 'caption_emoji_pool', label: 'Emoji ที่จะสุ่มใส่ใน {emoji}', type: 'text',
+        placeholder: '🎬,🔥,✨,📺,⚡,💥,🌟,🎥,🎞,🎟',
+        desc: 'คั่นด้วย comma — ระบบจะสุ่มหยิบมาแทน {emoji} / {emoji2} / {emoji3} ในทุกๆ clip' },
+    ]
+  },
+  {
     title: 'AI สร้างปกอัตโนมัติ', jp: '表紙',
     items: [
       { key: 'cover_enabled',         label: 'เปิดใช้ AI สร้างปก',  type: 'toggle',
