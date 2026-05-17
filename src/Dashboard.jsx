@@ -4,6 +4,9 @@ import ChannelWatcher from './components/ChannelWatcher';
 import QueueView from './components/QueueView';
 import SettingsView from './components/SettingsView';
 import ReviewsView from './components/ReviewsView';
+import BannersView from './components/BannersView';
+import CommentsView from './components/CommentsView';
+import AICaptionsView from './components/AICaptionsView';
 
 const NAV = [
   { key: 'home',       icon: '⚔', th: 'หน้าหลัก',          jp: '本拠' },
@@ -215,7 +218,12 @@ export default function Dashboard({ user }) {
         {nav === 'queue' && <QueueView showToast={showToast} />}
         {nav === 'settings' && <SettingsView showToast={showToast} user={user} />}
         {nav === 'reviews' && <ReviewsView showToast={showToast} />}
-        {nav !== 'home' && nav !== 'watcher' && nav !== 'queue' && nav !== 'settings' && nav !== 'reviews' && <PlaceholderView section={NAV.find(n => n.key === nav)} />}
+        {nav === 'banners' && <BannersView showToast={showToast} />}
+        {nav === 'comments' && <CommentsView showToast={showToast} />}
+        {nav === 'ai' && <AICaptionsView showToast={showToast} />}
+        {nav !== 'home' && nav !== 'watcher' && nav !== 'queue' && nav !== 'settings'
+          && nav !== 'reviews' && nav !== 'banners' && nav !== 'comments' && nav !== 'ai'
+          && <PlaceholderView section={NAV.find(n => n.key === nav)} />}
       </main>
 
       {toast && (
