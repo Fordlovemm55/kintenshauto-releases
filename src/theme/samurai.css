@@ -598,6 +598,21 @@ button, .btn {
   .setup-steps { gap: 8px; }
 }
 
+/* Default <option> styling. Chromium renders the open dropdown OUTSIDE the
+ * page DOM using system colors (white background on Windows), but uses the
+ * <select>'s color — so cream text-primary (#f4e8d0) on white = unreadable.
+ * Force dark background + bright text on every option so opened dropdowns
+ * match the rest of the dark theme.
+ */
+select option {
+  background-color: #1a1a1f;
+  color: var(--text-primary);
+}
+select option:checked {
+  background-color: #2a2018;
+  color: var(--gold-bright);
+}
+
 /* Queue header pause-button group — wraps below 640px */
 .queue-pause-group {
   display: flex;
