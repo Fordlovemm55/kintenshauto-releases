@@ -35,10 +35,24 @@ export default function DepsRequiredScreen({ status, onInstalled }) {
       const result = await window.kintenshauto?.installDeps?.();
       if (result?.ok === false) throw new Error(result.error || 'install failed');
 
-      // Re-check from backend; if cleared, App.jsx un-mounts this screen
+      // Re-check from backend (now re-resolves from disk on every call, so
+      // newly-downloaded files in USER_BIN_DIR are picked up without restart).
       const fresh = await fetch(`${API}/api/system/deps`).then(r => r.json());
       if (fresh.ok) {
-        onInstalled?.(fresh);
+        // Even though the check passes, the backend env vars (KINTENSHAUTO_*)
+        // were baked in at spawn — yt-dlp / ffmpeg invocations from the
+        // running backend still use the old (missing) path. Restart so the
+        // backend respawns with the fresh paths. App.jsx will re-mount and
+        // sail past the gate.
+        setProgress({ step: 'restart', status: 'restarting', message: 'เริ่มต้นแอปใหม่ให้อัตโนมัติ...' });
+        await new Promise(r => setTimeout(r, 1500));
+        if (window.kintenshauto?.relaunch) {
+          await window.kintenshauto.relaunch();
+          // process exits before we get here
+        } else {
+          // Browser-dev mode — no relaunch IPC. Just clear the gate.
+          onInstalled?.(fresh);
+        }
       } else {
         setError('ติดตั้งแล้วแต่ยังเช็คไม่ผ่าน: ขาด ' + fresh.missing.join(', ')
           + ' — restart แอปแล้วลองอีกครั้ง');

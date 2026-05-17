@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('kintenshauto', {
     isFirstRun: () => ipcRenderer.invoke('app:isFirstRun'),
     completeSetup: () => ipcRenderer.invoke('app:completeSetup'),
     resetSetup: () => ipcRenderer.invoke('app:resetSetup'),
+    relaunch: () => ipcRenderer.invoke('app:relaunch'),
     checkDeps: () => ipcRenderer.invoke('app:checkDeps'),
     installDeps: () => ipcRenderer.invoke('app:installDeps'),
     onDepsProgress: (cb) => {

@@ -436,6 +436,21 @@ ipcMain.handle('app:resetSetup', () => {
     }
 });
 
+// Restart the app cleanly. Used after install-deps so the backend respawns
+// with KINTENSHAUTO_FFMPEG / YTDLP / FPCALC env vars pointing at the newly
+// downloaded binaries (those vars are computed once at backend spawn time
+// and don't update otherwise).
+ipcMain.handle('app:relaunch', () => {
+    try {
+        try { if (backendProcess && !backendProcess.killed) backendProcess.kill(); } catch {}
+        app.relaunch();
+        app.exit(0);
+        return { ok: true };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+});
+
 ipcMain.handle('app:checkDeps', async () => {
     try {
         const depsPath = require.resolve('../scripts/check-dependencies');

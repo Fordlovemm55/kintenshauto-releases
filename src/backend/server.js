@@ -487,30 +487,57 @@ app.get('/api/health', (req, res) => {
 });
 
 // Binary dependency status — yt-dlp + ffmpeg + ffprobe + fpcalc.
-// Returns { ok, missing: [...], paths: { ... }, sizes: { ... } } so the
-// frontend can show a precise "please install" banner BEFORE the user
-// triggers anything that would spawn the missing binary.
+// Re-resolves paths from disk on every call. The env vars
+// (KINTENSHAUTO_FFMPEG/YTDLP/FPCALC) are baked in at backend spawn time, so
+// if the user just finished downloading deps into USER_BIN_DIR the env vars
+// still point at the missing-bundled path. We need to look on disk fresh.
 //
-// Exempt from auth — useful as a public health probe, and runs before
-// the user has even logged in.
+// Exempt from auth — runs before the user has even logged in.
 app.get('/api/system/deps', (req, res) => {
     const fsLocal = require('fs');
+    const pathLocal = require('path');
+
+    const userBinDir = process.env.KINTENSHAUTO_BIN_DIR
+        || (process.env.KINTENSHAUTO_USER_DATA ? pathLocal.join(process.env.KINTENSHAUTO_USER_DATA, 'bin') : null);
+    const ext = process.platform === 'win32' ? '.exe' : '';
+
+    // Build the resolution candidates fresh on every request. Mirrors
+    // electron/main.js's getBinPath() ordering: user-downloaded wins over
+    // bundled-with-installer wins over the env var that was set at spawn.
+    function resolve(binName) {
+        const candidates = [];
+        if (userBinDir) candidates.push(pathLocal.join(userBinDir, binName + ext));
+        // Env-var path (set at spawn) — keep as last fallback in case the
+        // user has a custom bin dir we don't know about.
+        const envKey = ({ ffmpeg: 'KINTENSHAUTO_FFMPEG', 'yt-dlp': 'KINTENSHAUTO_YTDLP',
+                          fpcalc: 'KINTENSHAUTO_FPCALC' })[binName];
+        if (envKey && process.env[envKey]) candidates.push(process.env[envKey]);
+
+        for (const c of candidates) {
+            if (c && fsLocal.existsSync(c)) return c;
+        }
+        return candidates[0] || null;  // expected path, even if missing
+    }
+
     const checks = [
-        { name: 'ffmpeg',  env: 'KINTENSHAUTO_FFMPEG',  required: true },
-        { name: 'ffprobe', env: 'KINTENSHAUTO_FFMPEG',  required: false,
-          derive: (p) => p ? p.replace(/ffmpeg(\.exe)?$/i, (_, ext) => 'ffprobe' + (ext || '')) : null },
-        { name: 'yt-dlp',  env: 'KINTENSHAUTO_YTDLP',   required: true },
-        { name: 'fpcalc',  env: 'KINTENSHAUTO_FPCALC',  required: false },
+        { name: 'ffmpeg',  required: true,  path: resolve('ffmpeg')  },
+        { name: 'yt-dlp',  required: true,  path: resolve('yt-dlp')  },
+        { name: 'fpcalc',  required: false, path: resolve('fpcalc')  },
     ];
+    // ffprobe is shipped alongside ffmpeg by the same download — derive from ffmpeg path
+    const ffmpegPath = checks[0].path;
+    const ffprobePath = ffmpegPath
+        ? ffmpegPath.replace(/ffmpeg(\.exe)?$/i, (_, e) => 'ffprobe' + (e || ''))
+        : null;
+    checks.push({ name: 'ffprobe', required: false, path: ffprobePath });
+
     const paths = {};
     const sizes = {};
     const missing = [];
     for (const c of checks) {
-        let p = process.env[c.env] || null;
-        if (c.derive) p = c.derive(p);
-        paths[c.name] = p;
-        if (p && fsLocal.existsSync(p)) {
-            try { sizes[c.name] = fsLocal.statSync(p).size; } catch { sizes[c.name] = null; }
+        paths[c.name] = c.path;
+        if (c.path && fsLocal.existsSync(c.path)) {
+            try { sizes[c.name] = fsLocal.statSync(c.path).size; } catch { sizes[c.name] = null; }
         } else if (c.required) {
             missing.push(c.name);
         }
@@ -520,7 +547,7 @@ app.get('/api/system/deps', (req, res) => {
         missing,
         paths,
         sizes,
-        bin_dir: process.env.KINTENSHAUTO_BIN_DIR || null
+        bin_dir: userBinDir
     });
 });
 
