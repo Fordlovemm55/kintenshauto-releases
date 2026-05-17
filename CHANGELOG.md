@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.0.17] — 2026-05-17
+
+### Added — No-AI caption modes
+- New `caption_mode` setting (`ai` / `template` / `source_title` / `off`) so
+  users can run the entire posting pipeline without paying for any AI
+  provider. Honored at BOTH `generateForPage` and `generateForWatcher` entry
+  points — no accidental API spend from the watcher shortcut.
+- Two helper settings exposed when `template` is picked:
+  `caption_template` (user template string) and `caption_emoji_pool` (csv
+  emoji rotated into `{emoji}` placeholders).
+- Variable support in templates: `{video_title}` `{video_title_short}`
+  `{clip_number}` `{total_clips}` `{channel_label}` `{page_name}` `{niche}`
+  plus `{emoji}` `{emoji2}` `{emoji3}` for independent random picks.
+- Settings UI section "แคปชั่น (AI หรือ Template)" — select for the mode,
+  textarea for the template, text input for the emoji pool.
+
+### Fixed
+- Facebook "Allow notifications?" permission prompt no longer freezes the
+  bot. Three layers: `--disable-notifications` and `--deny-permission-prompts`
+  Chrome flags on both `launchForProfile` and `launchPlainChromeForLogin`,
+  plus runtime `Permissions.overridePermissions(origin, [])` for the FB / IG
+  / X domains via Puppeteer CDP. Catches profiles whose Chrome had a stale
+  "granted" entry from before the flags were added.
+- Dropdown options in every `<select>` are now readable on the dark theme.
+  Chromium-on-Windows renders the open dropdown outside the page DOM with
+  white system background but inherits the select's `color`, so cream
+  `--text-primary` was unreadable on white. Global `select option`
+  override paints them dark with bright text and a darker checked highlight.
+
 ## [1.0.16] — 2026-05-17
 
 ### Added
