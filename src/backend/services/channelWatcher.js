@@ -430,6 +430,58 @@ class ChannelWatcher extends EventEmitter {
      * @returns {Promise<Array>} array ของ metadata object
      */
     _fetchChannelVideos(channelUrl, count) {
+        // YouTube channels with no /videos tab (Shorts-only, Live-only, or
+        // music auto-generated channels) cause yt-dlp to return:
+        //   "ERROR: [youtube:tab] <handle>: This channel does not have a videos tab"
+        // Auto-retry with /shorts → /streams → root URL so the user doesn't
+        // have to know in advance which tab the channel uses.
+        const isYouTube = /(?:^|\/\/)(?:www\.)?(?:youtube\.com|youtu\.be)\//i.test(channelUrl);
+        if (!isYouTube) return this._fetchChannelVideosOnce(channelUrl, count);
+
+        const m = channelUrl.match(/^(.+?)\/(videos|shorts|streams|live|featured)(\/?$)/i);
+        const fallbacks = [];
+        if (m) {
+            const base = m[1];
+            const tried = m[2].toLowerCase();
+            // Original first, then the other tabs the channel might actually have
+            fallbacks.push(channelUrl);
+            for (const tab of ['shorts', 'videos', 'streams', '']) {
+                if (tab === tried) continue;
+                fallbacks.push(tab ? `${base}/${tab}` : base);
+            }
+        } else {
+            // No tab suffix — try /shorts and /videos as common fallbacks
+            const base = channelUrl.replace(/\/+$/, '');
+            fallbacks.push(channelUrl, `${base}/shorts`, `${base}/videos`);
+        }
+
+        return (async () => {
+            let lastErr;
+            for (const url of fallbacks) {
+                try {
+                    const items = await this._fetchChannelVideosOnce(url, count);
+                    if (items.length > 0) {
+                        if (url !== channelUrl) {
+                            console.log(`[ChannelWatcher] _fetchChannelVideos: fell back from "${channelUrl}" to "${url}" (${items.length} items)`);
+                        }
+                        return items;
+                    }
+                    lastErr = new Error(`empty playlist from ${url}`);
+                } catch (e) {
+                    lastErr = e;
+                    // Only keep trying on the specific "no videos tab" / 404 errors;
+                    // a real failure (network, timeout) should not waste time on retries.
+                    const isTabError = /does not have a (videos|shorts|streams) tab/i.test(e.message)
+                        || /Unable to download API page/i.test(e.message)
+                        || /404/i.test(e.message);
+                    if (!isTabError) throw e;
+                }
+            }
+            throw lastErr || new Error('yt-dlp: no tab variant succeeded');
+        })();
+    }
+
+    _fetchChannelVideosOnce(channelUrl, count) {
         const noLimit = !count || count <= 0;
         return new Promise((resolve, reject) => {
             const args = [
