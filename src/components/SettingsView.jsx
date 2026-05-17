@@ -13,6 +13,17 @@ const PROVIDERS = [
 // rejects anything else. Add new keys on both sides when expanding.
 const SETTING_GROUPS = [
   {
+    title: 'การทำงานเบื้องหลัง', jp: '裏方',
+    items: [
+      { key: 'close_to_tray', label: 'กดปิดแล้วทำงานเบื้องหลัง', type: 'toggle',
+        defaultValue: '1',
+        desc: 'เปิด (ค่า default) = กดกากบาทแล้วซ่อนลง tray ระบบยังโพสต์อยู่ · ปิด = กดปิดแล้วออกจากโปรแกรมจริง' },
+      { key: 'chrome_headless', label: 'ซ่อน Chrome ตอนทำงาน', type: 'toggle',
+        defaultValue: '0',
+        desc: 'เปิด = Chrome ทำงานเงียบๆ ไม่โผล่ขึ้นมาเกะกะ · ปิด (default) = เห็น Chrome ทำงานอยู่ ตรวจสอบได้ง่าย · มีผลตอน Chrome เปิดครั้งถัดไป' },
+    ]
+  },
+  {
     title: 'ค่าเริ่มต้นคลิป + วิดีโอ', jp: '初期値',
     items: [
       { key: 'default_clips_per_video',  label: 'จำนวนคลิปต่อวิดีโอ',           type: 'number', placeholder: '5',  desc: 'ระบบจะแบ่ง 1 วิดีโอเป็นกี่คลิป' },

@@ -29,7 +29,23 @@ class BrowserManager {
 
     setDb(db) { this.db = db; }
 
-    async getBrowser(profile, { headless = false } = {}) {
+    async getBrowser(profile, opts = {}) {
+        // If the caller didn't force a headless choice, fall back to the
+        // user's "chrome_headless" setting (default: visible). This way the
+        // Settings toggle "ให้ Chrome ทำงานเบื้องหลัง" takes effect on the
+        // next Chrome spawn — already-cached Browsers keep their original
+        // visibility until they're closed and relaunched.
+        let headless = opts.headless;
+        if (headless === undefined && this.db) {
+            try {
+                const row = this.db.prepare(
+                    `SELECT value FROM settings WHERE key = 'chrome_headless'`
+                ).get();
+                headless = row?.value === '1';
+            } catch { headless = false; }
+        }
+        if (headless === undefined) headless = false;
+
         const cached = this.browsers.get(profile.id);
         if (cached) {
             try {

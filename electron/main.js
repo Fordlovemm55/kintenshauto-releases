@@ -62,6 +62,18 @@ function resolveWritableBinDir() {
 
 const USER_BIN_DIR = resolveWritableBinDir();
 
+// Read a window-affecting preference written by the backend at
+// <userData>/window-prefs.json. Returns the fallback if file missing /
+// invalid. Synchronous on purpose — used from the window 'close' handler.
+function readWindowPref(key, fallback) {
+    try {
+        const file = path.join(USER_DATA, 'window-prefs.json');
+        if (!fs.existsSync(file)) return fallback;
+        const j = JSON.parse(fs.readFileSync(file, 'utf-8'));
+        return key in j ? j[key] : fallback;
+    } catch { return fallback; }
+}
+
 function getBinPath(binName) {
     const ext = process.platform === 'win32' ? '.exe' : '';
     // Look in: preferred writable dir → legacy AppData dir → bundled
@@ -295,12 +307,17 @@ function createMainWindow() {
     });
 
     mainWindow.on('close', (e) => {
-        // ✅ FIX C4: ถ้า tray ไม่มี (init fail) → ปิด window = ออกโปรแกรมจริง
-        // เดิม: hide ตลอดแม้ tray ไม่มี → user ไม่มีทางเปิดใหม่ ต้องไป Task Manager
+        // Close-button behavior:
+        //   close_to_tray=true  (default) → hide to tray, app keeps running
+        //   close_to_tray=false           → actually quit
+        // The user toggles this in the Settings page; backend mirrors the
+        // current value to <userData>/window-prefs.json so we can read it
+        // synchronously here without a sync IPC into the running backend.
         if (!app.isQuitting) {
-            if (!tray) {
+            const closeToTray = readWindowPref('close_to_tray', true);
+            if (!tray || !closeToTray) {
                 app.isQuitting = true;
-                return;  // อย่า preventDefault → window close = quit ตามปกติ
+                return;  // let window close → quit normally
             }
             e.preventDefault();
             try { mainWindow.hide(); } catch {}

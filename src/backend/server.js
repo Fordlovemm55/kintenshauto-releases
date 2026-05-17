@@ -2713,8 +2713,32 @@ const ALLOWED_SETTING_KEYS = new Set([
     'slice_speed_factor',      // 1.0-2.0, speed-up factor during slice for copyright evasion
     'strict_copyright_wait',   // '0' = post anyway after copyright timeout (default), '1' = block
     'chrome_executable_path',  // user override for Chrome path (empty = auto-detect)
-    'watcher_auto_edit_enabled' // '1' = slice + banner ปกติ, '0' = โพสต์ raw clip ตรงๆ
+    'watcher_auto_edit_enabled', // '1' = slice + banner ปกติ, '0' = โพสต์ raw clip ตรงๆ
+    'close_to_tray',           // '1' (default) = close window hides to tray · '0' = quit on close
+    'chrome_headless'          // '0' (default) = Chrome ปรากฏ · '1' = ทำงานเบื้องหลัง (headless)
 ]);
+
+// Mirror window-affecting settings to a tiny JSON file that the main Electron
+// process can read synchronously inside its close handler. main.js doesn't
+// share the SQLite connection (different process) so this avoids a sync IPC
+// at close time.
+function syncWindowPrefsFile() {
+    try {
+        const userData = process.env.KINTENSHAUTO_USER_DATA;
+        if (!userData) return;
+        const prefsPath = require('path').join(userData, 'window-prefs.json');
+        const closeToTray = db.prepare(
+            `SELECT value FROM settings WHERE key = 'close_to_tray'`
+        ).get()?.value;
+        const chromeHeadless = db.prepare(
+            `SELECT value FROM settings WHERE key = 'chrome_headless'`
+        ).get()?.value;
+        require('fs').writeFileSync(prefsPath, JSON.stringify({
+            close_to_tray: closeToTray !== '0',          // default ON
+            chrome_headless: chromeHeadless === '1',     // default OFF
+        }, null, 2));
+    } catch (e) { console.warn('[settings] sync window-prefs failed:', e.message); }
+}
 
 // GET single setting by key — used by UI to read current value (e.g., toggle state)
 app.get('/api/settings/:key', (req, res) => {
@@ -2736,8 +2760,17 @@ app.put('/api/settings/:key', (req, res) => {
         return res.status(400).json({ error: 'ค่าว่างเปล่าหรือยาวเกิน 1024 ตัวอักษร' });
     }
     setSetting(key, value);
+    // When a window/Chrome behavior toggle changes, push it to the JSON file
+    // so the Electron main process picks it up next time it reads.
+    if (key === 'close_to_tray' || key === 'chrome_headless') {
+        syncWindowPrefsFile();
+    }
     res.json({ ok: true });
 });
+
+// Run the sync once at startup so the file exists even before the user touches
+// any toggle (main.js then has a deterministic baseline to read from).
+syncWindowPrefsFile();
 
 // ====================================================================
 // ADMIN
