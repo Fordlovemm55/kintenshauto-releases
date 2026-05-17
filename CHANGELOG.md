@@ -1,5 +1,57 @@
 # Changelog
 
+## [1.0.12] — 2026-05-17
+
+### Added — UI for every previously-placeholder sidebar tab
+- **ตั้งค่า (Settings)** — `SettingsView.jsx`: account/version/logs/logout, AI API
+  keys (OpenAI/Anthropic/Gemini) save/test/delete, app defaults (clip duration,
+  copyright wait, slice speed), cover-generation toggle + prompt, storage paths,
+  maintenance (log tail + clean downloads).
+- **ตรวจสอบ (Reviews)** — `ReviewsView.jsx`: copyright-blocked clips waiting
+  for retry decision; "ลอง Set 2" calls retry-set2 with on-demand ensureSet2,
+  "ยกเลิก" dismisses to failed. Auto-refresh every 8s.
+- **แบนเนอร์ (Banners)** — `BannersView.jsx`: upload PNG/JPG library +
+  multi-layer preset editor (X/Y/size/opacity, 9-direction quick-pick).
+- **คอมเม้นอัตโนมัติ (Comments)** — `CommentsView.jsx`: per-page comment-
+  settings (delay/jitter/max-per-day/cooldown/self-reply/pin/detect-removal) +
+  comment-template CRUD with live preview, page-scoped or global, weighted.
+- **AI แคปชั่น (AI Captions)** — `AICaptionsView.jsx`: caption-prompt CRUD,
+  model picker showing per-caption THB cost, in-modal "🧪 Test" against real AI.
+- **คิวงาน (Queue)** — `QueueView.jsx`: grouped page → scouted_video → clip
+  layout, per-page schedule editor (`post_times` JSON array), pause controls,
+  ClipPreviewModal integration.
+
+### Added — Backend, electron, build
+- Per-page `post_times` (TEXT JSON) column on `pages`; scheduler honors it
+  before falling back to global PEAK_SLOTS.
+- `/api/queue/grouped` endpoint serving the new QueueView.
+- Auto-updater progress + error IPC channels; private GitHub releases auth
+  via env-provided `GH_TOKEN`; verifyUpdateCodeSignature skipped (no cert).
+- Dynamic app version exposed via `app:getVersion` IPC → shown in window
+  title, splash, LoginScreen, SetupWizard, /api/health.
+- Mobile-responsive Dashboard: hamburger sidebar + scrim < 900px.
+
+### Fixed
+- Realtime channels couldn't connect on Electron 32 (Node 20 lacks global
+  WebSocket) → `supabaseClient.js` passes `ws` as transport.
+- Device-kick channel switched from broadcast to `postgres_changes` CDC on
+  `user_devices` — fires on takeover AND admin force-logout.
+- `/api/version/check` now runs unauthenticated, falling back to anon key, so
+  force-update prompts surface BEFORE login.
+- `/api/health` reads version from `package.json` instead of a hardcoded
+  literal that went stale every release.
+- Root `index.html` entry restored to `/src/main.jsx` (had been replaced with
+  built-artifact path, breaking subsequent Vite rebuilds).
+- Embedded production Supabase defaults in `config.js` so packaged installer
+  works without an adjacent `.env`. service_role is NEVER embedded.
+
+### Security
+- Removed all hardcoded secrets from working tree + git history via
+  filter-branch: GitHub PAT (`electron/main.js`), Supabase service_role +
+  ADMIN_SHARED_SECRET (`plan3` doc). Must be supplied via env var at build
+  time. Backup of pre-rewrite history kept locally on tag
+  `backup-pre-secret-rewrite`.
+
 ## [Unreleased] — Plan 2 Desktop Cloud Integration
 
 ### Added
