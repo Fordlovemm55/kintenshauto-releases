@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import SamuraiBackground from './components/SamuraiBackground';
 import ChannelWatcher from './components/ChannelWatcher';
 import QueueView from './components/QueueView';
+import SettingsView from './components/SettingsView';
 
 const NAV = [
   { key: 'home',       icon: '⚔', th: 'หน้าหลัก',          jp: '本拠' },
@@ -211,7 +212,8 @@ export default function Dashboard({ user }) {
         )}
         {nav === 'watcher' && <ChannelWatcher showToast={showToast} />}
         {nav === 'queue' && <QueueView showToast={showToast} />}
-        {nav !== 'home' && nav !== 'watcher' && nav !== 'queue' && <PlaceholderView section={NAV.find(n => n.key === nav)} />}
+        {nav === 'settings' && <SettingsView showToast={showToast} user={user} />}
+        {nav !== 'home' && nav !== 'watcher' && nav !== 'queue' && nav !== 'settings' && <PlaceholderView section={NAV.find(n => n.key === nav)} />}
       </main>
 
       {toast && (
