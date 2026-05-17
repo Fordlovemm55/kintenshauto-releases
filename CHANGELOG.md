@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.0.15] — 2026-05-17
+
+### Added — System dependency gate
+- `GET /api/system/deps` re-resolves binary paths from disk on every request
+  (was reading cached env vars baked in at backend spawn).
+- `DepsRequiredScreen` — full-screen blocking modal that fires on app launch
+  if `ffmpeg` or `yt-dlp` is missing. Shows per-binary status, a "📥 ดาวน์โหลด
+  ทั้งหมด" button with live progress, and triggers an auto-restart after
+  successful install so the backend respawns with correct env paths.
+- `app:relaunch` IPC bridge → `app.relaunch() + app.exit(0)` so the entire
+  Electron + backend stack restarts cleanly after the deps download.
+
+### Fixed — Channel watcher YouTube tab fallback
+- yt-dlp returns `"This channel does not have a videos tab"` for Shorts-only
+  / Live-only / music-auto channels. Now `_fetchChannelVideos` wraps the
+  call in a fallback chain — original URL first, then `/shorts` → `/videos`
+  → `/streams` → root. Retries only on the specific tab/404 errors so real
+  failures still surface immediately. Verified manually against the failing
+  Thai channel `@สาวสวย-Thailand` (zero items at `/videos`, 3 at `/shorts`).
+
+### Fixed — Facebook auto-login reliability
+- Set a mobile Android Chrome user-agent before `page.goto` so FB serves the
+  lightweight `m.facebook.com` form with stable `name=email` / `name=pass`
+  selectors. The v1.0.14 code routed through `mbasic.facebook.com` but FB
+  redirected desktop UA to `www.facebook.com/login.php`, whose React-
+  hydrated form took longer than 15s to render the email input → timeout
+  and empty Chrome window.
+- Wait 2s after navigation then inspect URL — if FB redirected away from
+  `/login` (cookies still valid), treat as already-logged-in success
+  instead of waiting forever for a form that won't render.
+- Try multiple selector variants for email / password / submit; first match
+  wins. Handles `m.facebook.com` vs `www.facebook.com` vs the rare
+  `m_login_email` legacy id.
+- Auto-close Chrome on success (2.5s grace period for cookies to flush);
+  leave it open on `needs_2fa` / `login_failed` so the user can finish
+  manually. That's the whole point of the flow returning control.
+
 ## [1.0.14] — 2026-05-17
 
 ### Added — Auto-login for Facebook profiles
