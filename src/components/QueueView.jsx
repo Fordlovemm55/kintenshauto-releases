@@ -620,14 +620,14 @@ function PageSettingsEditor({ page, showToast, onSaved }) {
           ใส่ได้สูงสุด 24 เวลา · คลิปใหม่จะลงคิวที่เวลาว่างวันถัดไป
         </span>
       </div>
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
+        รูปแบบ 24 ชั่วโมง (00:00–23:59) — เช่น 14:30 = บ่าย 2 ครึ่ง · 20:00 = 2 ทุ่ม
+      </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
         {times.map((t, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <input type="time" value={t} onChange={e => updateTime(i, e.target.value)}
-                   style={{ fontSize: 12, padding: '3px 6px', width: 90 }} />
-            <button className="btn-ghost" style={{ fontSize: 11, padding: '2px 6px', color: 'var(--danger)' }}
-                    onClick={() => removeTime(i)}>✕</button>
-          </div>
+          <TimePicker24 key={i} value={t}
+                        onChange={(v) => updateTime(i, v)}
+                        onRemove={() => removeTime(i)} />
         ))}
         <button className="btn-ghost" style={{ fontSize: 11, padding: '3px 10px' }}
                 onClick={addTime}>+ เพิ่มเวลา</button>
@@ -640,6 +640,43 @@ function PageSettingsEditor({ page, showToast, onSaved }) {
           {saving ? 'กำลังบันทึก...' : '💾 บันทึก'}
         </button>
       </div>
+    </div>
+  );
+}
+
+// 24-hour HH:MM picker using two <select>s. <input type="time"> falls back
+// to OS locale on Chromium and shows AM/PM on English Windows — explicit
+// hour + minute selects guarantee 24-hour everywhere.
+function TimePicker24({ value, onChange, onRemove }) {
+  const safe = /^(\d{1,2}):(\d{1,2})$/.exec(value || '');
+  const hour = safe ? String(Math.min(23, parseInt(safe[1], 10))).padStart(2, '0') : '12';
+  const minute = safe ? String(Math.min(59, parseInt(safe[2], 10))).padStart(2, '0') : '00';
+  const set = (h, m) => onChange(`${h}:${m}`);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 2,
+                  background: 'var(--surface-1)',
+                  border: '0.5px solid var(--border-faint)', padding: '1px 4px' }}>
+      <select value={hour} onChange={e => set(e.target.value, minute)}
+              style={{ fontSize: 12, padding: '2px 4px', border: 'none',
+                       background: 'transparent', color: 'var(--text-primary)' }}>
+        {Array.from({ length: 24 }, (_, h) => {
+          const v = String(h).padStart(2, '0');
+          return <option key={v} value={v}>{v}</option>;
+        })}
+      </select>
+      <span style={{ color: 'var(--text-muted)' }}>:</span>
+      <select value={minute} onChange={e => set(hour, e.target.value)}
+              style={{ fontSize: 12, padding: '2px 4px', border: 'none',
+                       background: 'transparent', color: 'var(--text-primary)' }}>
+        {Array.from({ length: 60 }, (_, m) => {
+          const v = String(m).padStart(2, '0');
+          return <option key={v} value={v}>{v}</option>;
+        })}
+      </select>
+      <button className="btn-ghost"
+              style={{ fontSize: 11, padding: '2px 6px',
+                       color: 'var(--danger)', border: 'none' }}
+              onClick={onRemove} title="ลบเวลานี้">✕</button>
     </div>
   );
 }
