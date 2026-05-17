@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.0.16] — 2026-05-17
+
+### Added
+- Queue "fresh" indicator: rows that just arrived since the last 5s refresh
+  tick get a pulsing gold border + "✨ ใหม่" badge for 15 seconds. The
+  panel title shows a "✨ มี N คลิปใหม่ — คลิกเพื่อเลื่อนไปดู" pill that
+  scrolls to the first fresh row when clicked. Sets containing fresh clips
+  auto-expand. Same treatment for Pending Downloads rows.
+- New "การทำงานเบื้องหลัง" section in Settings with two toggles:
+  - `close_to_tray` (default on) — closing the window hides to tray instead
+    of quitting, so posting keeps running.
+  - `chrome_headless` (default off) — Puppeteer Chrome launches hidden so
+    it doesn't pop up over the user's other windows. Applies to the next
+    Chrome spawn per profile.
+
+### Changed
+- Deps downloader writes to `<install-dir>/bin/` instead of always
+  `%APPDATA%\Roaming\kintenshauto\bin\`. User who installs to D:\ now keeps
+  ffmpeg + yt-dlp on D: too. Legacy AppData path stays in the lookup chain
+  so upgrades don't re-download.
+- Schedule time picker is now hour + minute `<select>` (00–23 / 00–59)
+  instead of `<input type="time">`. Always 24-hour regardless of OS locale
+  — English-locale Windows no longer renders the schedule as 12-hour AM/PM.
+
 ## [1.0.15] — 2026-05-17
 
 ### Added — System dependency gate
