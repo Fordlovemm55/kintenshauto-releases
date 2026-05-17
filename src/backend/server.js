@@ -940,6 +940,107 @@ app.post('/api/profiles/:id/login-chrome', asyncHandler(async (req, res) => {
     }
 }));
 
+// Auto-login: launch Puppeteer-controlled Chrome, autofill email + password,
+// click Login, then hand the window back to the user so they can complete
+// 2FA / CAPTCHA / device confirmation themselves.
+//
+// Only valid for FB profiles with stored credentials. The autofill happens
+// via DevTools Protocol on the user's real userDataDir, so cookies set by
+// FB after a successful login persist on disk (next session = already logged
+// in). We deliberately do NOT close the Chrome window after submitting the
+// form — closing would interrupt 2FA/checkpoint flows.
+//
+// Returns immediately after launching the browser. The actual fill+click
+// runs in the background and result is emitted via socket.io 'login:status'.
+app.post('/api/profiles/:id/auto-login', asyncHandler(async (req, res) => {
+    const profile = db.prepare('SELECT * FROM profiles WHERE id = ?').get(req.params.id);
+    if (!profile) throw notFound('ไม่พบบัญชีเฟส');
+    if ((profile.platform || 'facebook') !== 'facebook') {
+        throw badRequest('Auto-login รองรับเฉพาะ Facebook (สำหรับ X / Instagram ใช้ "เปิด Chrome" แล้ว login เอง)');
+    }
+    if (!profile.fb_username) throw badRequest('บัญชีนี้ไม่มีอีเมล/เบอร์โทร — แก้ไขก่อน');
+    if (!profile.fb_password) throw badRequest('บัญชีนี้ไม่มีรหัสผ่าน — แก้ไขก่อน');
+
+    const password = decrypt(profile.fb_password);
+    if (!password) throw new Error('ถอดรหัสรหัสผ่านไม่สำเร็จ — รหัสอาจถูกบันทึกผิดรอบ');
+
+    // Kick off in background — Chrome takes 2–4s to spawn + connect, and we
+    // don't want the user to wait on the modal closing. They'll see the
+    // Chrome window pop up shortly.
+    (async () => {
+        try {
+            const browserManager = require('./core/browserManager');
+            const browser = await browserManager.getBrowser(profile);
+            const pages = await browser.pages();
+            const page = pages[0] || await browser.newPage();
+            try { await page.bringToFront(); } catch {}
+
+            // Use mbasic for the simplest possible markup — fewer selector
+            // variants and no Messenger pop-ups. Falls back to m. on regional
+            // routing. Both honor the user's locale.
+            await page.goto('https://mbasic.facebook.com/login.php', {
+                waitUntil: 'domcontentloaded',
+                timeout: 30000
+            });
+
+            // mbasic selectors: input[name=email], input[name=pass], #login_form input[type=submit]
+            await page.waitForSelector('input[name="email"]', { timeout: 15000 });
+            await page.evaluate(() => {
+                const e = document.querySelector('input[name="email"]');
+                const p = document.querySelector('input[name="pass"]');
+                if (e) e.value = '';
+                if (p) p.value = '';
+            });
+            await page.type('input[name="email"]', profile.fb_username, { delay: 30 });
+            await page.type('input[name="pass"]', password, { delay: 30 });
+
+            // Submit the form. Don't waitForNavigation aggressively — FB may
+            // redirect to checkpoint / 2FA / save-device, which all count as
+            // a "successful" autofill from our perspective.
+            await Promise.all([
+                page.waitForNavigation({ timeout: 20000 }).catch(() => null),
+                page.click('#login_form input[type="submit"], button[name="login"]').catch(() => {})
+            ]);
+
+            // Wait briefly so 2FA / checkpoint page has time to render
+            await new Promise(r => setTimeout(r, 1500));
+
+            const finalUrl = page.url();
+            const needsExtraStep = /checkpoint|two_step|two-factor|two_factor|confirm|save-device/.test(finalUrl)
+                || (await page.$('input[name="approvals_code"]').catch(() => null)) != null;
+
+            db.prepare(`UPDATE profiles SET status = ?, last_login_at = datetime('now', 'localtime') WHERE id = ?`)
+              .run(needsExtraStep ? 'needs_2fa' : 'logged_in', profile.id);
+
+            io.emit('login:status', {
+                profileId: profile.id,
+                platform: 'facebook',
+                ok: !needsExtraStep,
+                needs_2fa: needsExtraStep,
+                url: finalUrl,
+                message: needsExtraStep
+                    ? 'กรอกอีเมล + รหัสผ่านให้แล้ว — Facebook ขอ verify (2FA / device confirm) ทำต่อในหน้าต่าง Chrome'
+                    : 'login สำเร็จ — สามารถปิด Chrome ได้แล้ว'
+            });
+        } catch (e) {
+            console.error('[auto-login] failed for profile', profile.id, ':', e.message);
+            db.prepare(`UPDATE profiles SET status = 'login_failed' WHERE id = ?`).run(profile.id);
+            io.emit('login:status', {
+                profileId: profile.id,
+                platform: 'facebook',
+                ok: false,
+                error: e.message,
+                message: 'auto-login ล้มเหลว: ' + e.message + ' — login เองในหน้าต่าง Chrome ที่เปิดอยู่'
+            });
+        }
+    })();
+
+    res.json({
+        ok: true,
+        message: 'กำลังเปิด Chrome + กรอกข้อมูลให้... รอ 3-5 วินาที — ถ้ามี 2FA ทำต่อในหน้าต่าง Chrome'
+    });
+}));
+
 // "Test login" — open Chrome (or focus existing) for user to verify session
 app.post('/api/profiles/:id/test-login', asyncHandler(async (req, res) => {
     const profile = db.prepare('SELECT * FROM profiles WHERE id = ?').get(req.params.id);

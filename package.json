@@ -1,6 +1,6 @@
 {
   "name": "kintenshauto",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "KINTENSHAUTO - เครื่องมือโพสต์ Reel อัตโนมัติสำหรับ Facebook",
   "main": "electron/main.js",
   "author": "KINTENSHAUTO Team",

@@ -520,10 +520,24 @@
     // Actions
     const actions = el('div', { class: 'pc-actions' });
 
-    actions.appendChild(el('button', {
-      class: 'btn-primary',
-      onclick: () => onLoginChrome(profile)
-    }, '🌐 เปิด Chrome login'));
+    // FB profiles with stored credentials get an "Auto-login" primary action.
+    // Other platforms (X / IG / FB without credentials) fall back to the
+    // plain "Open Chrome" path that requires the user to type manually.
+    if (platform === 'facebook' && profile.fb_username) {
+      actions.appendChild(el('button', {
+        class: 'btn-primary',
+        onclick: () => onAutoLogin(profile)
+      }, '⚡ Auto-login'));
+      actions.appendChild(el('button', {
+        class: 'btn-ghost',
+        onclick: () => onLoginChrome(profile)
+      }, '🌐 เปิด Chrome'));
+    } else {
+      actions.appendChild(el('button', {
+        class: 'btn-primary',
+        onclick: () => onLoginChrome(profile)
+      }, '🌐 เปิด Chrome login'));
+    }
 
     actions.appendChild(el('button', {
       class: 'btn-ghost',
@@ -561,6 +575,18 @@
       showToast('เปิด Chrome แล้ว', r.message || 'login ใน Chrome → ปิด Chrome เองหลังเสร็จ', 'success');
     } catch (e) {
       showToast('ผิดพลาด', e.message, 'danger');
+    }
+  }
+
+  // Puppeteer-controlled FB login: opens Chrome, autofills email + password,
+  // clicks Login. Returns immediately — actual fill runs in the background.
+  // 2FA / device confirmation pages are left for the user to complete.
+  async function onAutoLogin(profile) {
+    try {
+      const r = await api(`/api/profiles/${profile.id}/auto-login`, { method: 'POST' });
+      showToast('Auto-login', r.message || 'กำลังเปิด Chrome + กรอกรหัสให้...', 'info');
+    } catch (e) {
+      showToast('Auto-login ไม่สำเร็จ', e.message, 'danger');
     }
   }
 
@@ -703,13 +729,30 @@
     for (const [k, v] of fd.entries()) {
       if (v !== '') body[k] = v;
     }
+    let created;
     try {
-      await api('/api/profiles', { method: 'POST', body: JSON.stringify(body) });
+      created = await api('/api/profiles', { method: 'POST', body: JSON.stringify(body) });
       showToast('เพิ่มบัญชีแล้ว', body.name, 'success');
       modal.remove();
       refresh();
     } catch (e) {
       showToast('เพิ่มไม่สำเร็จ', e.message, 'danger');
+      return;
+    }
+
+    // For Facebook profiles with credentials, immediately fire off auto-login
+    // so the user doesn't have to dig through the table to click "🌐 เปิด Chrome".
+    // Chrome window pops up, we autofill email + password + click Login, then
+    // hand the window back to the user for 2FA / device confirm. Failure is
+    // non-fatal — the profile row still exists for manual login.
+    if (platform === 'facebook' && body.fb_username && body.fb_password && created?.id) {
+      try {
+        const result = await api(`/api/profiles/${created.id}/auto-login`, { method: 'POST' });
+        showToast('กำลังเปิด Chrome', result.message || 'กรอก email + รหัสผ่านให้แล้ว', 'info');
+      } catch (e) {
+        showToast('Auto-login ไม่สำเร็จ',
+          e.message + ' — กด "🌐 เปิด Chrome" ในตาราง เพื่อ login เอง', 'warning');
+      }
     }
   }
 

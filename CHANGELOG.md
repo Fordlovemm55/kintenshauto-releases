@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.0.14] — 2026-05-17
+
+### Added — Auto-login for Facebook profiles
+- New endpoint `POST /api/profiles/:id/auto-login` that launches the user's
+  Puppeteer-controlled Chrome, navigates to `mbasic.facebook.com/login.php`,
+  autofills email + password, clicks Login, and hands the window back to the
+  user for 2FA / device confirmation. Failure is non-fatal — the profile row
+  stays and the user can still use "🌐 เปิด Chrome" to log in manually.
+- Profile-add form now fires auto-login automatically after creating a FB
+  profile with stored credentials — one click to add + log in. Plain Chrome
+  open is still available as a fallback button on the profile card.
+- New "⚡ Auto-login" primary button on every FB profile card that has
+  credentials (replaces "🌐 เปิด Chrome" as the primary action; the manual
+  Chrome button moves to the secondary slot).
+- Status reflected in `profiles.status`: `logged_in` / `needs_2fa` /
+  `login_failed`. Socket.io `login:status` event broadcasts the result.
+
+### Fixed — Duplicate "ตามช่องอัตโนมัติ" nav entry
+- Removed the React `<ChannelWatcher>` tab from `Dashboard.jsx` NAV array.
+  `watcher-injection.js` already injects a fuller channel-watcher UI (1768
+  lines, 25 endpoints vs the React skeleton's 707 lines / 13 endpoints), so
+  having both produced two identical sidebar entries. The injection wins.
+
 ## [1.0.13] — 2026-05-17
 
 Verification release — exercises the v1.0.12 → v1.0.13 auto-update path now

@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import SamuraiBackground from './components/SamuraiBackground';
-import ChannelWatcher from './components/ChannelWatcher';
 import QueueView from './components/QueueView';
 import SettingsView from './components/SettingsView';
 import ReviewsView from './components/ReviewsView';
@@ -11,7 +10,10 @@ import AICaptionsView from './components/AICaptionsView';
 const NAV = [
   { key: 'home',       icon: '⚔', th: 'หน้าหลัก',          jp: '本拠' },
   { key: 'profiles',   icon: '◈', th: 'จัดการเฟส',         jp: '盟友' },
-  { key: 'watcher',    icon: '👁', th: 'ตามช่องอัตโนมัติ',  jp: '見張り', alertKey: 'pending_approvals' },
+  // 'watcher' tab removed — watcher-injection.js adds its own nav-item with
+  // a far more complete UI (channel CRUD, pending-approvals approve-all,
+  // AI caption per-channel, advanced filters). The old React ChannelWatcher
+  // was a partial skeleton that produced a duplicate "ตามช่องอัตโนมัติ" entry.
   { key: 'banners',    icon: '❋', th: 'แบนเนอร์',          jp: '旗' },
   { key: 'comments',   icon: '✎', th: 'คอมเม้นอัตโนมัติ',  jp: '言霊' },
   { key: 'ai',         icon: '✦', th: 'AI แคปชั่น',        jp: '知恵' },
@@ -214,14 +216,14 @@ export default function Dashboard({ user }) {
             startPipeline={startPipeline} running={running}
           />
         )}
-        {nav === 'watcher' && <ChannelWatcher showToast={showToast} />}
+        {/* nav === 'watcher' handled entirely by public/assets/watcher-injection.js */}
         {nav === 'queue' && <QueueView showToast={showToast} />}
         {nav === 'settings' && <SettingsView showToast={showToast} user={user} />}
         {nav === 'reviews' && <ReviewsView showToast={showToast} />}
         {nav === 'banners' && <BannersView showToast={showToast} />}
         {nav === 'comments' && <CommentsView showToast={showToast} />}
         {nav === 'ai' && <AICaptionsView showToast={showToast} />}
-        {nav !== 'home' && nav !== 'watcher' && nav !== 'queue' && nav !== 'settings'
+        {nav !== 'home' && nav !== 'queue' && nav !== 'settings'
           && nav !== 'reviews' && nav !== 'banners' && nav !== 'comments' && nav !== 'ai'
           && <PlaceholderView section={NAV.find(n => n.key === nav)} />}
       </main>
