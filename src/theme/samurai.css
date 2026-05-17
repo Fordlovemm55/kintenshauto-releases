@@ -609,6 +609,69 @@ button, .btn {
 }
 
 /* ============================================================
+ * Queue "fresh" indicator — pulses a row + adds a ✨ badge for
+ * 15 seconds when a new clip arrives. Helps the user spot the
+ * newcomer when the queue is long and scrolled.
+ * ============================================================ */
+@keyframes queue-fresh-pulse {
+  0%, 100% {
+    border-color: var(--border-faint);
+    box-shadow: 0 0 0 0 rgba(212, 175, 55, 0);
+  }
+  50% {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.18);
+  }
+}
+.queue-fresh-row {
+  animation: queue-fresh-pulse 1.2s ease-in-out infinite;
+  border-width: 1px !important;
+  border-style: solid !important;
+}
+
+@keyframes queue-fresh-badge-blink {
+  from { opacity: 0.65; transform: scale(0.96); }
+  to   { opacity: 1;    transform: scale(1.06); }
+}
+.queue-fresh-badge {
+  position: absolute;
+  top: -8px;
+  right: 8px;
+  background: var(--gold);
+  color: #18120a;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+  animation: queue-fresh-badge-blink 0.7s ease-in-out infinite alternate;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* "✨ มี N คลิปใหม่ — คลิกเพื่อเลื่อนไปดู" pill in the panel title */
+@keyframes queue-fresh-pill-blink {
+  0%, 100% { background: rgba(212, 175, 55, 0.18); }
+  50%      { background: rgba(212, 175, 55, 0.42); }
+}
+.queue-fresh-pill {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 2px 10px;
+  font-size: 11px;
+  color: var(--gold);
+  border: 1px solid var(--gold);
+  border-radius: 12px;
+  cursor: pointer;
+  animation: queue-fresh-pill-blink 1.2s ease-in-out infinite;
+  user-select: none;
+}
+.queue-fresh-pill:hover {
+  background: rgba(212, 175, 55, 0.5) !important;
+}
+
+/* ============================================================
  * Responsive shell (sidebar collapses to drawer)
  * ============================================================ */
 @media (max-width: 900px) {

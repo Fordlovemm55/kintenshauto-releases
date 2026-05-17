@@ -1,5 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ClipPreviewModal from './ClipPreviewModal';
+
+const FRESH_DURATION_MS = 15000; // job pulses + shows "ใหม่" badge for 15s
 
 const API = 'http://localhost:3003';
 
@@ -34,6 +36,34 @@ export default function QueueView({ showToast }) {
   const [previewPageName, setPreviewPageName] = useState(null);
   const [previewVideoTitle, setPreviewVideoTitle] = useState(null);
 
+  // "Fresh" tracking — items that just appeared since the last refresh get a
+  // pulsing border + "✨ ใหม่" badge for 15s so users notice them when the
+  // queue is long. On first mount we seed the seen-set silently so existing
+  // items don't all flash at once.
+  const seenJobIdsRef = useRef(null);
+  const seenPendingIdsRef = useRef(null);
+  const [freshJobs, setFreshJobs] = useState(() => new Set());
+  const [freshPendings, setFreshPendings] = useState(() => new Set());
+
+  const markFresh = useCallback((newIds, isPending) => {
+    if (!newIds.length) return;
+    const setter = isPending ? setFreshPendings : setFreshJobs;
+    setter(prev => {
+      const next = new Set(prev);
+      for (const id of newIds) next.add(id);
+      return next;
+    });
+    // Drop the fresh flag after FRESH_DURATION_MS — clip can still be
+    // looked up normally, just no longer pulsing
+    setTimeout(() => {
+      setter(prev => {
+        const next = new Set(prev);
+        for (const id of newIds) next.delete(id);
+        return next;
+      });
+    }, FRESH_DURATION_MS);
+  }, []);
+
   const refresh = useCallback(async () => {
     try {
       const [g, w, p] = await Promise.all([
@@ -41,16 +71,47 @@ export default function QueueView({ showToast }) {
         fetch(`${API}/api/worker/status`).then(r => r.json()).catch(() => ({})),
         fetch(`${API}/api/watcher/pending?limit=20`).then(r => r.json()).catch(() => []),
       ]);
-      setGroups(Array.isArray(g) ? g : []);
-      setWorker(w || {});
-      // Show only items still in download/prep flow — pending or downloading.
-      // 'done' means the orchestrator handed them off and they're now real
-      // jobs (already visible in the categorized queue below).
-      setPendingDownloads(Array.isArray(p)
+      const groupsArr = Array.isArray(g) ? g : [];
+      const pendingArr = Array.isArray(p)
         ? p.filter(x => x.status === 'pending' || x.status === 'downloading' || x.status === 'failed')
-        : []);
+        : [];
+
+      // Diff job IDs vs the seen-set from the previous tick
+      const currentJobIds = new Set();
+      for (const pg of groupsArr) for (const s of pg.sets) for (const j of s.jobs) {
+        currentJobIds.add(j.job_id);
+      }
+      if (seenJobIdsRef.current === null) {
+        // First-mount seed — don't flash anything, just record what's here
+        seenJobIdsRef.current = currentJobIds;
+      } else {
+        const newJobIds = [];
+        for (const id of currentJobIds) {
+          if (!seenJobIdsRef.current.has(id)) newJobIds.push(id);
+        }
+        for (const id of newJobIds) seenJobIdsRef.current.add(id);
+        markFresh(newJobIds, false);
+      }
+
+      // Same dance for pending-downloads — flash a row when an approval first
+      // appears (i.e. user just clicked Approve in the Watcher tab)
+      const currentPendingIds = new Set(pendingArr.map(x => x.id));
+      if (seenPendingIdsRef.current === null) {
+        seenPendingIdsRef.current = currentPendingIds;
+      } else {
+        const newPendingIds = [];
+        for (const id of currentPendingIds) {
+          if (!seenPendingIdsRef.current.has(id)) newPendingIds.push(id);
+        }
+        for (const id of newPendingIds) seenPendingIdsRef.current.add(id);
+        markFresh(newPendingIds, true);
+      }
+
+      setGroups(groupsArr);
+      setWorker(w || {});
+      setPendingDownloads(pendingArr);
     } catch (e) { console.error('queue refresh:', e); }
-  }, []);
+  }, [markFresh]);
 
   useEffect(() => {
     refresh();
@@ -203,33 +264,40 @@ export default function QueueView({ showToast }) {
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
             อนุมัติแล้ว — ระบบกำลังดาวน์โหลด/ตัดต่อ จะปรากฏในคิวด้านล่างเมื่อพร้อม
           </div>
-          {pendingDownloads.map(p => (
-            <div key={p.id} style={{
-              padding: '6px 0', borderTop: '0.5px solid var(--border-faint)',
-              display: 'flex', justifyContent: 'space-between', gap: 10
-            }}>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 12, overflow: 'hidden',
-                              textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  📥 {p.title || p.source_url}
+          {pendingDownloads.map(p => {
+            const isFresh = freshPendings.has(p.id);
+            return (
+              <div key={p.id}
+                   className={isFresh ? 'queue-fresh-row' : ''}
+                   style={{
+                     padding: '6px 8px', borderTop: '0.5px solid var(--border-faint)',
+                     display: 'flex', justifyContent: 'space-between', gap: 10,
+                     position: 'relative'
+                   }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 12, overflow: 'hidden',
+                                textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    📥 {p.title || p.source_url}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                    ช่อง {p.channel_label || '—'}
+                    {p.status === 'downloading' && p.download_progress != null
+                      && <> · กำลังโหลด {p.download_progress}%</>}
+                    {p.status === 'failed' && p.download_error
+                      && <> · <span style={{ color: 'var(--danger)' }}>ผิดพลาด: {p.download_error.slice(0, 60)}</span></>}
+                  </div>
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-                  ช่อง {p.channel_label || '—'}
-                  {p.status === 'downloading' && p.download_progress != null
-                    && <> · กำลังโหลด {p.download_progress}%</>}
-                  {p.status === 'failed' && p.download_error
-                    && <> · <span style={{ color: 'var(--danger)' }}>ผิดพลาด: {p.download_error.slice(0, 60)}</span></>}
-                </div>
+                <span className={`badge badge-${p.status === 'failed' ? 'danger'
+                                              : p.status === 'downloading' ? 'gold' : 'info'}`}
+                      style={{ fontSize: 10, alignSelf: 'center' }}>
+                  {p.status === 'failed' ? 'ผิดพลาด'
+                   : p.status === 'downloading' ? 'กำลังดาวน์โหลด'
+                   : 'รอดาวน์โหลด'}
+                </span>
+                {isFresh && <span className="queue-fresh-badge">✨ ใหม่</span>}
               </div>
-              <span className={`badge badge-${p.status === 'failed' ? 'danger'
-                                            : p.status === 'downloading' ? 'gold' : 'info'}`}
-                    style={{ fontSize: 10, alignSelf: 'center' }}>
-                {p.status === 'failed' ? 'ผิดพลาด'
-                 : p.status === 'downloading' ? 'กำลังดาวน์โหลด'
-                 : 'รอดาวน์โหลด'}
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -238,7 +306,19 @@ export default function QueueView({ showToast }) {
         <div className="panel-header">
           <div>
             <div className="label-jp">待機列</div>
-            <div className="panel-title">คิวงาน — จัดเป็นเซ็ตตามเรื่อง</div>
+            <div className="panel-title">
+              คิวงาน — จัดเป็นเซ็ตตามเรื่อง
+              {freshJobs.size > 0 && (
+                <span className="queue-fresh-pill"
+                      onClick={() => {
+                        // Scroll to the first fresh row
+                        const el = document.querySelector('.queue-fresh-row');
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}>
+                  ✨ มี {freshJobs.size} คลิปใหม่ — คลิกเพื่อเลื่อนไปดู
+                </span>
+              )}
+            </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
               ทั้งหมด {totals.clips} คลิป · {totals.sets} เซ็ต · รีเฟรชอัตโนมัติทุก 5 วินาที
             </div>
@@ -269,6 +349,7 @@ export default function QueueView({ showToast }) {
               setEditingPageId={setEditingPageId}
               showToast={showToast}
               refresh={refresh}
+              freshJobs={freshJobs}
               onPreview={(job, set) => {
                 setPreviewJob(job);
                 setPreviewClip({ id: job.clip_id, clip_index: job.clip_index,
@@ -298,8 +379,11 @@ export default function QueueView({ showToast }) {
 }
 
 function PageGroup({ page, expanded, toggleSet, editingPageId, setEditingPageId,
-                     showToast, refresh, onPreview }) {
+                     showToast, refresh, onPreview, freshJobs }) {
   const noSchedule = page.post_times.length === 0;
+  // Has any fresh clip inside this page? Used to auto-expand its sets so the
+  // pulse is visible without the user manually clicking ▶
+  const pageHasFreshJob = page.sets.some(s => s.jobs.some(j => freshJobs?.has(j.job_id)));
   return (
     <div style={{ borderBottom: '1px solid var(--border-faint)', padding: '14px 0' }}>
       {/* Page header — name + counts + ⚙ button */}
@@ -313,6 +397,9 @@ function PageGroup({ page, expanded, toggleSet, editingPageId, setEditingPageId,
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
             {page.sets.length} เรื่อง · {page.total_clips} คลิป · โพสต์แล้ว {page.posted_clips}/{page.total_clips}
           </span>
+          {pageHasFreshJob && (
+            <span className="queue-fresh-badge" style={{ position: 'static' }}>✨ คลิปใหม่</span>
+          )}
         </div>
         <button className="btn-ghost" style={{ fontSize: 11, padding: '3px 10px' }}
                 onClick={() => setEditingPageId(editingPageId === page.page_id ? null : page.page_id)}
@@ -350,14 +437,18 @@ function PageGroup({ page, expanded, toggleSet, editingPageId, setEditingPageId,
 
       {/* Sets (scouted_videos) */}
       {page.sets.map(set => {
-        const setOpen = expanded.has(`set-${set.scouted_id}`);
+        // Auto-open the set if it has any fresh clip — saves the user a click
+        const setHasFreshJob = set.jobs.some(j => freshJobs?.has(j.job_id));
+        const setOpen = expanded.has(`set-${set.scouted_id}`) || setHasFreshJob;
         const earliest = set.jobs[0]?.scheduled_at;
         return (
-          <div key={set.scouted_id ?? Math.random()} style={{
-            margin: '6px 0', padding: 10,
-            background: 'var(--surface-2)', border: '0.5px solid var(--border-faint)',
-            borderRadius: 4
-          }}>
+          <div key={set.scouted_id ?? Math.random()}
+               className={setHasFreshJob ? 'queue-fresh-row' : ''}
+               style={{
+                 margin: '6px 0', padding: 10,
+                 background: 'var(--surface-2)', border: '0.5px solid var(--border-faint)',
+                 borderRadius: 4, position: 'relative'
+               }}>
             <div style={{ display: 'flex', justifyContent: 'space-between',
                           alignItems: 'flex-start', gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
@@ -376,6 +467,7 @@ function PageGroup({ page, expanded, toggleSet, editingPageId, setEditingPageId,
                   </span>
                 </div>
               </div>
+              {setHasFreshJob && <span className="queue-fresh-badge">✨ ใหม่</span>}
             </div>
 
             {/* Per-clip rows when expanded */}
@@ -383,7 +475,8 @@ function PageGroup({ page, expanded, toggleSet, editingPageId, setEditingPageId,
               <div style={{ marginTop: 10, borderTop: '0.5px solid var(--border-faint)', paddingTop: 8 }}>
                 {set.jobs.map(j => (
                   <ClipRow key={j.job_id} job={j} onPreview={() => onPreview(j, set)}
-                           showToast={showToast} refresh={refresh} />
+                           showToast={showToast} refresh={refresh}
+                           isFresh={freshJobs?.has(j.job_id)} />
                 ))}
               </div>
             )}
@@ -394,7 +487,7 @@ function PageGroup({ page, expanded, toggleSet, editingPageId, setEditingPageId,
   );
 }
 
-function ClipRow({ job, onPreview, showToast, refresh }) {
+function ClipRow({ job, onPreview, showToast, refresh, isFresh }) {
   const [busy, setBusy] = useState(false);
   const isPending = job.status === 'pending';
   const isRunning = job.status === 'running';
@@ -413,13 +506,17 @@ function ClipRow({ job, onPreview, showToast, refresh }) {
   };
 
   return (
-    <div style={{
-      padding: '6px 4px', display: 'grid',
-      gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'center',
-      borderBottom: '0.5px solid var(--border-faint)'
-    }}>
+    <div className={isFresh ? 'queue-fresh-row' : ''}
+         style={{
+           padding: '6px 8px', display: 'grid',
+           gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'center',
+           borderBottom: '0.5px solid var(--border-faint)',
+           position: 'relative'
+         }}>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>
         EP {job.clip_index}
+        {isFresh && <span className="queue-fresh-badge"
+                          style={{ position: 'static', marginLeft: 6 }}>✨ ใหม่</span>}
       </div>
       <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span className={`badge badge-${STATUS_BADGE(job.status)}`} style={{ fontSize: 10 }}>
