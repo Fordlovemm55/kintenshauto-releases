@@ -85,13 +85,18 @@ function launchPlainChromeForLogin(profile, { startUrl = 'https://www.facebook.c
     const port = pickPortForProfile(profile.id);
 
     // MINIMAL flags + remote-debugging-port. NO automation flags.
+    // notification + permission-prompt killers — same rationale as the
+    // Puppeteer-controlled launch (FB's "Allow notifications?" popup
+    // otherwise blocks the bot).
     const args = [
         `--user-data-dir=${userDataDir}`,
         '--profile-directory=Default',
         `--remote-debugging-port=${port}`,
         '--no-first-run',
         '--no-default-browser-check',
-        '--disable-features=DestroyProfileOnBrowserClose'
+        '--disable-features=DestroyProfileOnBrowserClose,NotificationTriggers,PushMessaging',
+        '--disable-notifications',
+        '--deny-permission-prompts'
     ];
     if (profile.proxy_host && profile.proxy_port) {
         const proxy = (profile.proxy_type || 'http') + '://' + profile.proxy_host + ':' + profile.proxy_port;
@@ -200,16 +205,21 @@ async function launchForProfile(profile, { headless = false } = {}) {
 
     const port = pickPortForProfile(profile.id);
 
-    // MINIMAL flags — looks identical to plain Chrome from FB's perspective
+    // MINIMAL flags — looks identical to plain Chrome from FB's perspective.
+    // The --disable-notifications + --deny-permission-prompts combo blocks
+    // Facebook's "Allow notifications?" popup, which used to freeze the bot
+    // (Puppeteer can't dismiss browser-level permission prompts via DOM).
     const args = [
         `--user-data-dir=${userDataDir}`,
         '--profile-directory=Default',
         `--remote-debugging-port=${port}`,
         '--no-first-run',
         '--no-default-browser-check',
-        '--disable-features=DestroyProfileOnBrowserClose',
+        '--disable-features=DestroyProfileOnBrowserClose,NotificationTriggers,PushMessaging',
         '--disable-session-crashed-bubble',
-        '--disable-infobars'
+        '--disable-infobars',
+        '--disable-notifications',
+        '--deny-permission-prompts'
     ];
     if (profile.proxy_host && profile.proxy_port) {
         const proxy = (profile.proxy_type || 'http') + '://' + profile.proxy_host + ':' + profile.proxy_port;

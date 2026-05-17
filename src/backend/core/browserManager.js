@@ -64,6 +64,27 @@ class BrowserManager {
             try {
                 const browser = await launchForProfile(profile, { headless });
 
+                // Deny ALL web permissions for FB origins so the "Allow notifications?"
+                // / "Use your location?" / camera / microphone prompts never appear
+                // (these prompts block Puppeteer — they're not DOM elements, they're
+                // a Chrome-internal toast). The Chrome launch flags
+                // --disable-notifications + --deny-permission-prompts cover most of
+                // this at the browser level; this is the belt-and-suspenders runtime
+                // override.
+                try {
+                    const ctx = browser.defaultBrowserContext();
+                    for (const origin of [
+                        'https://www.facebook.com', 'https://m.facebook.com',
+                        'https://mbasic.facebook.com', 'https://web.facebook.com',
+                        'https://www.instagram.com', 'https://m.instagram.com',
+                        'https://twitter.com', 'https://x.com', 'https://mobile.twitter.com'
+                    ]) {
+                        await ctx.overridePermissions(origin, []).catch(() => {});
+                    }
+                } catch (e) {
+                    console.warn('[browserManager] permission override failed:', e.message);
+                }
+
                 // Restore cookies from DB backup — set BEFORE any page.goto
                 if (this.db) {
                     try {
