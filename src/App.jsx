@@ -3,6 +3,7 @@ import LoginScreen from './login/LoginScreen';
 import SetupWizard from './setup-wizard/SetupWizard';
 import Dashboard from './Dashboard';
 import UpdatePromptModal from './components/UpdatePromptModal';
+import DepsRequiredScreen from './components/DepsRequiredScreen';
 
 const API = 'http://localhost:3003';
 
@@ -18,6 +19,11 @@ export default function App() {
   const [phase, setPhase] = useState('prompt');
   const [progress, setProgress] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
+
+  // System binary deps (ffmpeg + yt-dlp). If anything required is missing
+  // the user sees a blocking install screen — better than letting them click
+  // approve/scout and getting a raw "spawn ENOENT" error.
+  const [deps, setDeps] = useState(null); // null = unchecked, { ok, missing, ... } = checked
 
   useEffect(() => {
     (async () => {
@@ -36,6 +42,12 @@ export default function App() {
         const statusData = await statusRes.json();
         loggedIn = statusData.logged_in === true;
         user = statusData.user || null;
+
+        // Probe binary deps in parallel (cheap, ~10 ms) — non-fatal if it fails.
+        try {
+          const depsRes = await fetch(`${API}/api/system/deps`).then(r => r.json());
+          setDeps(depsRes);
+        } catch { setDeps({ ok: true, missing: [] }); }
       } catch {
         loggedIn = false;
       }
@@ -119,6 +131,18 @@ export default function App() {
   }
 
   if (state.loading) return <LoadingScreen />;
+
+  // Block app behind a "install dependencies" screen if any required binary
+  // (yt-dlp / ffmpeg) is missing on disk. Calling endpoints like /api/watcher/
+  // check-now would otherwise spawn nothing and surface a confusing ENOENT.
+  if (deps && !deps.ok && deps.missing?.length) {
+    return (
+      <DepsRequiredScreen
+        status={deps}
+        onInstalled={(fresh) => setDeps(fresh)}
+      />
+    );
+  }
 
   let main;
   if (!state.loggedIn) {

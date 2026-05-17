@@ -486,6 +486,44 @@ app.get('/api/health', (req, res) => {
     res.json({ ok: true, version: pkg.version, db: dbExists ? 'existing' : 'fresh', time: new Date().toISOString() });
 });
 
+// Binary dependency status — yt-dlp + ffmpeg + ffprobe + fpcalc.
+// Returns { ok, missing: [...], paths: { ... }, sizes: { ... } } so the
+// frontend can show a precise "please install" banner BEFORE the user
+// triggers anything that would spawn the missing binary.
+//
+// Exempt from auth — useful as a public health probe, and runs before
+// the user has even logged in.
+app.get('/api/system/deps', (req, res) => {
+    const fsLocal = require('fs');
+    const checks = [
+        { name: 'ffmpeg',  env: 'KINTENSHAUTO_FFMPEG',  required: true },
+        { name: 'ffprobe', env: 'KINTENSHAUTO_FFMPEG',  required: false,
+          derive: (p) => p ? p.replace(/ffmpeg(\.exe)?$/i, (_, ext) => 'ffprobe' + (ext || '')) : null },
+        { name: 'yt-dlp',  env: 'KINTENSHAUTO_YTDLP',   required: true },
+        { name: 'fpcalc',  env: 'KINTENSHAUTO_FPCALC',  required: false },
+    ];
+    const paths = {};
+    const sizes = {};
+    const missing = [];
+    for (const c of checks) {
+        let p = process.env[c.env] || null;
+        if (c.derive) p = c.derive(p);
+        paths[c.name] = p;
+        if (p && fsLocal.existsSync(p)) {
+            try { sizes[c.name] = fsLocal.statSync(p).size; } catch { sizes[c.name] = null; }
+        } else if (c.required) {
+            missing.push(c.name);
+        }
+    }
+    res.json({
+        ok: missing.length === 0,
+        missing,
+        paths,
+        sizes,
+        bin_dir: process.env.KINTENSHAUTO_BIN_DIR || null
+    });
+});
+
 app.get('/api/stats/daily', asyncHandler(async (req, res) => {
     const today = db.prepare(`
         SELECT COALESCE(SUM(posts_count), 0) as posted_today
