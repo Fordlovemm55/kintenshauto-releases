@@ -31,25 +31,60 @@ function getResourcePath(...segments) {
         : path.join(__dirname, '..', ...segments);
 }
 
-// User-writable bin dir for runtime-downloaded binaries (set up by setup wizard)
-const USER_BIN_DIR = path.join(USER_DATA, 'bin');
+// User-writable bin dir for runtime-downloaded binaries. Prefer a folder
+// NEXT TO the installed .exe so the deps live on the same drive the user
+// picked at install (e.g. D:\Apps\KINTENSHAUTO\bin\). Falls back to
+// %APPDATA%\Roaming\kintenshauto\bin\ only if the install dir is read-only
+// (Program Files without admin) — old installs already wrote there so we
+// keep that path in the lookup chain for backward compatibility.
+const LEGACY_BIN_DIR = path.join(USER_DATA, 'bin');
+
+function resolveWritableBinDir() {
+    if (!app.isPackaged) {
+        return path.join(__dirname, '..', 'bin', process.platform);
+    }
+    // process.resourcesPath = <install>/resources → install dir = parent
+    const installDir = path.dirname(process.resourcesPath);
+    const tryDirs = [path.join(installDir, 'bin'), LEGACY_BIN_DIR];
+    for (const dir of tryDirs) {
+        try {
+            fs.mkdirSync(dir, { recursive: true });
+            const probe = path.join(dir, '.write-probe');
+            fs.writeFileSync(probe, 'ok');
+            fs.unlinkSync(probe);
+            return dir;
+        } catch { /* not writable — try next */ }
+    }
+    // Last resort even if probe failed; the deps-install flow will surface
+    // a clearer error than us crashing here.
+    return LEGACY_BIN_DIR;
+}
+
+const USER_BIN_DIR = resolveWritableBinDir();
 
 function getBinPath(binName) {
     const ext = process.platform === 'win32' ? '.exe' : '';
+    // Look in: preferred writable dir → legacy AppData dir → bundled
+    // (dev mode just uses the project bin/<platform>/ and bypasses the legacy chain)
     const candidates = app.isPackaged
         ? [
-            path.join(USER_BIN_DIR, binName + ext),                      // user-downloaded (priority)
-            path.join(process.resourcesPath, 'bin', binName + ext)        // bundled
+            path.join(USER_BIN_DIR, binName + ext),
+            path.join(LEGACY_BIN_DIR, binName + ext),
+            path.join(process.resourcesPath, 'bin', binName + ext)
         ]
         : [
             path.join(USER_BIN_DIR, binName + ext),
             path.join(__dirname, '..', 'bin', process.platform, binName + ext)
         ];
+    // Dedup (USER_BIN_DIR === LEGACY_BIN_DIR when install dir isn't writable)
+    const seen = new Set();
     for (const c of candidates) {
+        if (seen.has(c)) continue;
+        seen.add(c);
         if (fs.existsSync(c)) return c;
     }
     // Return the first candidate even if missing — caller may handle ENOENT
-    return candidates[candidates.length - 1];
+    return candidates[0];
 }
 
 function getAssetPath(name) {
@@ -362,6 +397,8 @@ function startBackend() {
             ELECTRON_RUN_AS_NODE: '1',
             KINTENSHAUTO_DB: DB_PATH,
             KINTENSHAUTO_USER_DATA: USER_DATA,
+            KINTENSHAUTO_BIN_DIR: USER_BIN_DIR,
+            KINTENSHAUTO_LEGACY_BIN_DIR: LEGACY_BIN_DIR,
             KINTENSHAUTO_CHROME_PROFILES: CHROME_PROFILES_DIR,
             KINTENSHAUTO_DOWNLOADS: DOWNLOADS_DIR,
             KINTENSHAUTO_OVERLAYS: OVERLAYS_DIR,

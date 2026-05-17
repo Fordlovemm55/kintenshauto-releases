@@ -497,18 +497,23 @@ app.get('/api/system/deps', (req, res) => {
     const fsLocal = require('fs');
     const pathLocal = require('path');
 
+    // Prefer the writable bin dir chosen by main.js (next to .exe when the
+    // install dir is writable, else userData/bin). Legacy AppData location
+    // is checked second so existing installs that wrote there continue to work.
     const userBinDir = process.env.KINTENSHAUTO_BIN_DIR
+        || (process.env.KINTENSHAUTO_USER_DATA ? pathLocal.join(process.env.KINTENSHAUTO_USER_DATA, 'bin') : null);
+    const legacyBinDir = process.env.KINTENSHAUTO_LEGACY_BIN_DIR
         || (process.env.KINTENSHAUTO_USER_DATA ? pathLocal.join(process.env.KINTENSHAUTO_USER_DATA, 'bin') : null);
     const ext = process.platform === 'win32' ? '.exe' : '';
 
-    // Build the resolution candidates fresh on every request. Mirrors
-    // electron/main.js's getBinPath() ordering: user-downloaded wins over
-    // bundled-with-installer wins over the env var that was set at spawn.
     function resolve(binName) {
         const candidates = [];
-        if (userBinDir) candidates.push(pathLocal.join(userBinDir, binName + ext));
-        // Env-var path (set at spawn) — keep as last fallback in case the
-        // user has a custom bin dir we don't know about.
+        if (userBinDir)   candidates.push(pathLocal.join(userBinDir, binName + ext));
+        if (legacyBinDir && legacyBinDir !== userBinDir) {
+            candidates.push(pathLocal.join(legacyBinDir, binName + ext));
+        }
+        // Env-var path (set at spawn) — keep as backstop in case main.js
+        // somehow used a different location entirely.
         const envKey = ({ ffmpeg: 'KINTENSHAUTO_FFMPEG', 'yt-dlp': 'KINTENSHAUTO_YTDLP',
                           fpcalc: 'KINTENSHAUTO_FPCALC' })[binName];
         if (envKey && process.env[envKey]) candidates.push(process.env[envKey]);
