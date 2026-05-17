@@ -1013,53 +1013,132 @@ app.post('/api/profiles/:id/auto-login', asyncHandler(async (req, res) => {
             const page = pages[0] || await browser.newPage();
             try { await page.bringToFront(); } catch {}
 
-            // Use mbasic for the simplest possible markup — fewer selector
-            // variants and no Messenger pop-ups. Falls back to m. on regional
-            // routing. Both honor the user's locale.
-            await page.goto('https://mbasic.facebook.com/login.php', {
+            // Mobile UA → FB serves the leaner mbasic markup with stable
+            // input[name=email] / input[name=pass] / button[name=login]
+            // selectors. Without this, desktop FB renders a JS-heavy form
+            // where the input fields render asynchronously and selectors
+            // can time out before the React hydration completes.
+            const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 10; SM-G960F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+            try { await page.setUserAgent(MOBILE_UA); } catch {}
+
+            await page.goto('https://m.facebook.com/login.php', {
                 waitUntil: 'domcontentloaded',
                 timeout: 30000
             });
 
-            // mbasic selectors: input[name=email], input[name=pass], #login_form input[type=submit]
-            await page.waitForSelector('input[name="email"]', { timeout: 15000 });
-            await page.evaluate(() => {
-                const e = document.querySelector('input[name="email"]');
-                const p = document.querySelector('input[name="pass"]');
-                if (e) e.value = '';
-                if (p) p.value = '';
-            });
-            await page.type('input[name="email"]', profile.fb_username, { delay: 30 });
-            await page.type('input[name="pass"]', password, { delay: 30 });
+            // Give FB ~2s to fully render and run its redirects. Old cookies
+            // may bump the page to /home, /save-device, /checkpoint, or
+            // straight to the user's home — handle all those.
+            await new Promise(r => setTimeout(r, 2000));
 
-            // Submit the form. Don't waitForNavigation aggressively — FB may
-            // redirect to checkpoint / 2FA / save-device, which all count as
-            // a "successful" autofill from our perspective.
+            const earlyUrl = page.url();
+            const alreadyLoggedIn = !/\/(login|recover|reg)/i.test(earlyUrl)
+                && !(/login\.php/.test(earlyUrl));
+            if (alreadyLoggedIn) {
+                db.prepare(`UPDATE profiles SET status = 'logged_in', last_login_at = datetime('now', 'localtime') WHERE id = ?`)
+                  .run(profile.id);
+                io.emit('login:status', {
+                    profileId: profile.id, platform: 'facebook',
+                    ok: true, already_logged_in: true, url: earlyUrl,
+                    message: 'มี session อยู่แล้ว — login ผ่าน cookies เดิม · ปิด Chrome ให้อัตโนมัติ'
+                });
+                // Auto-close: no user interaction was needed
+                await new Promise(r => setTimeout(r, 1500));
+                try { await browserManager.closeBrowser(profile.id); } catch {}
+                return;
+            }
+
+            // Wait for any of several email-input variants to appear
+            const EMAIL_SELECTORS = [
+                'input[name="email"]',
+                'input#email',
+                'input[id="m_login_email"]',
+                'input[type="email"]'
+            ];
+            const PASS_SELECTORS = [
+                'input[name="pass"]',
+                'input#pass',
+                'input[id="m_login_password"]',
+                'input[type="password"]'
+            ];
+            const SUBMIT_SELECTORS = [
+                'button[name="login"]',
+                'button[type="submit"]',
+                '#login_form button',
+                '#login_password_step_element button',
+                'input[type="submit"][value*="Log"]'
+            ];
+
+            const findFirst = async (selectors, timeoutEach = 4000) => {
+                for (const s of selectors) {
+                    try {
+                        await page.waitForSelector(s, { timeout: timeoutEach });
+                        return s;
+                    } catch {}
+                }
+                return null;
+            };
+
+            const emailSel = await findFirst(EMAIL_SELECTORS);
+            if (!emailSel) {
+                // Couldn't find login form on a /login URL — could be a
+                // partial-cookies state where FB shows "use saved account"
+                // instead. Don't error out; leave the window for the user.
+                throw new Error('ไม่เจอ field email บนหน้า login (อาจอยู่ใน save-device flow) — กรอกเองใน Chrome');
+            }
+            const passSel = await findFirst(PASS_SELECTORS, 2000);
+
+            // Clear + type credentials
+            await page.evaluate((es, ps) => {
+                const e = document.querySelector(es);
+                if (e) { e.value = ''; e.focus(); }
+                const p = ps && document.querySelector(ps);
+                if (p) p.value = '';
+            }, emailSel, passSel);
+            await page.type(emailSel, profile.fb_username, { delay: 30 });
+            if (passSel) await page.type(passSel, password, { delay: 30 });
+
+            // Click whatever submit button exists
+            const submitSel = await findFirst(SUBMIT_SELECTORS, 1500);
             await Promise.all([
                 page.waitForNavigation({ timeout: 20000 }).catch(() => null),
-                page.click('#login_form input[type="submit"], button[name="login"]').catch(() => {})
+                submitSel
+                    ? page.click(submitSel).catch(() => {})
+                    : page.keyboard.press('Enter').catch(() => {})
             ]);
 
-            // Wait briefly so 2FA / checkpoint page has time to render
-            await new Promise(r => setTimeout(r, 1500));
+            // Let 2FA / checkpoint page render
+            await new Promise(r => setTimeout(r, 2000));
 
             const finalUrl = page.url();
-            const needsExtraStep = /checkpoint|two_step|two-factor|two_factor|confirm|save-device/.test(finalUrl)
+            const needsExtraStep = /checkpoint|two_step|two-factor|two_factor|confirm|save-device|approvals/.test(finalUrl)
                 || (await page.$('input[name="approvals_code"]').catch(() => null)) != null;
+            const stillOnLogin = /\/login(\.php)?\//.test(finalUrl) || /\/login(\.php)?$/.test(finalUrl);
+
+            let status, ok, message, autoClose;
+            if (needsExtraStep) {
+                status = 'needs_2fa'; ok = false; autoClose = false;
+                message = 'กรอก email + รหัสผ่านให้แล้ว — Facebook ขอ verify (2FA / device confirm) ทำต่อใน Chrome';
+            } else if (stillOnLogin) {
+                status = 'login_failed'; ok = false; autoClose = false;
+                message = 'login ไม่ผ่าน — รหัสผิด หรือบัญชีโดน lock — ลองกรอกเองใน Chrome';
+            } else {
+                status = 'logged_in'; ok = true; autoClose = true;
+                message = 'login สำเร็จ — ปิด Chrome อัตโนมัติแล้ว';
+            }
 
             db.prepare(`UPDATE profiles SET status = ?, last_login_at = datetime('now', 'localtime') WHERE id = ?`)
-              .run(needsExtraStep ? 'needs_2fa' : 'logged_in', profile.id);
+              .run(status, profile.id);
+            io.emit('login:status', { profileId: profile.id, platform: 'facebook',
+                ok, needs_2fa: needsExtraStep, url: finalUrl, message });
 
-            io.emit('login:status', {
-                profileId: profile.id,
-                platform: 'facebook',
-                ok: !needsExtraStep,
-                needs_2fa: needsExtraStep,
-                url: finalUrl,
-                message: needsExtraStep
-                    ? 'กรอกอีเมล + รหัสผ่านให้แล้ว — Facebook ขอ verify (2FA / device confirm) ทำต่อในหน้าต่าง Chrome'
-                    : 'login สำเร็จ — สามารถปิด Chrome ได้แล้ว'
-            });
+            // Auto-close on success only — 2FA / login_failed leaves the window
+            // open so the user can finish manually. Wait ~2.5s so the post-login
+            // cookies have time to commit to disk before we tear down Chrome.
+            if (autoClose) {
+                await new Promise(r => setTimeout(r, 2500));
+                try { await browserManager.closeBrowser(profile.id); } catch {}
+            }
         } catch (e) {
             console.error('[auto-login] failed for profile', profile.id, ':', e.message);
             db.prepare(`UPDATE profiles SET status = 'login_failed' WHERE id = ?`).run(profile.id);
@@ -1068,7 +1147,7 @@ app.post('/api/profiles/:id/auto-login', asyncHandler(async (req, res) => {
                 platform: 'facebook',
                 ok: false,
                 error: e.message,
-                message: 'auto-login ล้มเหลว: ' + e.message + ' — login เองในหน้าต่าง Chrome ที่เปิดอยู่'
+                message: 'auto-login ล้มเหลว: ' + e.message + ' — login เองในหน้าต่าง Chrome'
             });
         }
     })();
