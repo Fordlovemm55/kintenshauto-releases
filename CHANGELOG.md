@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.0.23] — 2026-05-19
+
+### Fixed — YouTube login captured incomplete cookies, broke yt-dlp
+- v1.0.22 closed the dedicated Chrome window the instant SAPISID
+  appeared on `.google.com`. That cookie is set immediately after the
+  Google login form, BEFORE Google redirects the user to
+  `www.youtube.com` — so the captured `cookies.txt` was missing the
+  YouTube session cookie (`LOGIN_INFO`) that yt-dlp actually needs.
+  Result: users completed the gate but every download still hit
+  "Sign in to confirm you're not a bot".
+- New detection waits until BOTH `SAPISID` (.google) AND `LOGIN_INFO`
+  (.youtube) are present, and stays that way for 3 consecutive polls
+  (~6s) before snapshotting. Trailing redirects/refresh cookies land
+  before we close.
+- After Google login finishes but the user is stuck somewhere other
+  than youtube.com (account-picker, Google home), the service now
+  force-navigates the first page to `https://www.youtube.com/` so the
+  YouTube cookie can get set without manual help.
+- If the user closes the Chrome window themselves (as several testers
+  preferred), we now use the best snapshot captured so far instead of
+  throwing "User closed before login completed".
+
 ## [1.0.22] — 2026-05-18
 
 ### Added — Dedicated YouTube login flow + cookies.txt

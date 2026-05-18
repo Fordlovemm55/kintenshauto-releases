@@ -31,9 +31,12 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 
 puppeteer.use(StealthPlugin());
 
-const COOKIE_NAMES_THAT_MEAN_LOGGED_IN = [
-    'SAPISID', '__Secure-1PAPISID', '__Secure-3PAPISID'
-];
+// Google account auth cookies — set on .google.com after the user finishes
+// the Google login form. Necessary but NOT sufficient: yt-dlp also needs the
+// YouTube session cookie on .youtube.com (LOGIN_INFO), which is only created
+// AFTER the user lands on a youtube.com page in the post-login redirect.
+const GOOGLE_AUTH_COOKIES = ['SAPISID', '__Secure-1PAPISID', '__Secure-3PAPISID'];
+const YOUTUBE_SESSION_COOKIE = 'LOGIN_INFO';
 
 // Find Chrome binary (mirrors poster.js findChromeExecutable but standalone)
 function findChrome() {
@@ -203,42 +206,100 @@ class YouTubeLoginService {
 
     async _waitForLoginAndCapture(browser, { timeoutMs, onLog }) {
         const start = Date.now();
-        let success = false;
+        let bestSnapshot = null;      // latest cookies that at least have Google auth
+        let goodCheckCount = 0;       // consecutive checks where BOTH Google + YouTube present
+        let navigatedToYt = false;    // only force-navigate once
+
         while (Date.now() - start < timeoutMs) {
-            // Check if user closed the window themselves
-            if (!this._activeProc) {
-                throw new Error('User closed the browser window before login finished');
-            }
-            try {
-                const cookies = await browser.cookies();
-                const haveAuth = cookies.some(c =>
-                    COOKIE_NAMES_THAT_MEAN_LOGGED_IN.includes(c.name)
-                    && (c.domain || '').includes('google')
-                );
-                if (haveAuth) {
-                    onLog(`detected ${cookies.length} cookies — writing cookies.txt`);
-                    const text = cookiesToNetscape(cookies);
-                    fs.writeFileSync(this.cookiesPath, text, 'utf8');
-                    // Persist the path in settings so ChannelWatcher picks it up
-                    if (this.db) {
-                        this.db.prepare(
-                            `INSERT INTO settings (key, value) VALUES ('youtube_cookies_path', ?)
-                             ON CONFLICT(key) DO UPDATE SET value = excluded.value`
-                        ).run(this.cookiesPath);
-                    }
-                    success = true;
-                    // Auto-close the browser window — login complete
-                    this.closeWindow();
-                    return { ok: true, cookies_count: cookies.length, path: this.cookiesPath };
+            // User manually closed the Chrome window — use the best snapshot we
+            // saw so far. This handles the "let me verify I'm on YouTube and
+            // close it myself" flow that users want.
+            const procDead = !this._activeProc;
+            const browserDead = !browser.connected;
+            if (procDead || browserDead) {
+                if (bestSnapshot) {
+                    onLog(`window closed — saving best snapshot (${bestSnapshot.length} cookies)`);
+                    return this._saveCookies(bestSnapshot);
                 }
-            } catch (e) {
-                // Browser disconnected mid-poll
-                if (!success) onLog(`poll error: ${e.message}`);
+                throw new Error('User closed the window before any login cookies were captured');
             }
-            await sleep(1500);
+
+            let cookies = [];
+            try { cookies = await browser.cookies(); }
+            catch (e) { onLog(`browser.cookies() failed: ${e.message}`); }
+
+            const hasGoogleAuth = cookies.some(c =>
+                GOOGLE_AUTH_COOKIES.includes(c.name) && (c.domain || '').includes('google'));
+            const hasYouTubeSession = cookies.some(c =>
+                c.name === YOUTUBE_SESSION_COOKIE && (c.domain || '').includes('youtube'));
+
+            // Remember the latest snapshot that has at least Google auth — falls
+            // back to this if user closes early or times out.
+            if (hasGoogleAuth) bestSnapshot = cookies;
+
+            if (hasGoogleAuth && hasYouTubeSession) {
+                goodCheckCount++;
+                onLog(`✓ Google + YouTube cookies both present (check ${goodCheckCount}/3)`);
+                // Wait for 3 consecutive successful polls (~6s) so any trailing
+                // redirect/cookie sets land before we capture and close.
+                if (goodCheckCount >= 3) {
+                    onLog(`finalizing — saving ${cookies.length} cookies and closing Chrome`);
+                    this.closeWindow();
+                    await sleep(500);
+                    return this._saveCookies(cookies);
+                }
+            } else {
+                goodCheckCount = 0;
+                // User logged into Google but hasn't reached youtube.com → kick
+                // the first page over to www.youtube.com so YouTube can set
+                // LOGIN_INFO. Only attempt once to avoid disrupting the user.
+                if (hasGoogleAuth && !navigatedToYt) {
+                    navigatedToYt = true;
+                    await this._nudgeToYouTube(browser, onLog);
+                }
+            }
+            await sleep(2000);
+        }
+
+        // Hard timeout
+        if (bestSnapshot) {
+            onLog(`timeout — falling back to best snapshot (${bestSnapshot.length} cookies)`);
+            this.closeWindow();
+            return this._saveCookies(bestSnapshot);
         }
         this.closeWindow();
-        throw new Error(`login timed out after ${Math.round(timeoutMs / 1000)}s — user did not complete login`);
+        throw new Error(`login timed out after ${Math.round(timeoutMs / 1000)}s — user never completed login`);
+    }
+
+    // After Google login redirects somewhere other than youtube.com (often
+    // a Google account picker / continue page) the YouTube session cookie is
+    // never set. Force navigation so LOGIN_INFO gets populated.
+    async _nudgeToYouTube(browser, onLog) {
+        try {
+            const pages = await browser.pages();
+            const page = pages[0];
+            if (!page) return;
+            const url = page.url();
+            if (!/(^|\.)youtube\.com/.test(new URL(url).hostname || '')) {
+                onLog(`Google authenticated — nudging to youtube.com (was ${url})`);
+                await page.goto('https://www.youtube.com/', { waitUntil: 'domcontentloaded', timeout: 20000 })
+                    .catch(e => onLog(`nudge nav failed: ${e.message}`));
+            }
+        } catch (e) {
+            onLog(`nudge skipped: ${e.message}`);
+        }
+    }
+
+    _saveCookies(cookies) {
+        const text = cookiesToNetscape(cookies);
+        fs.writeFileSync(this.cookiesPath, text, 'utf8');
+        if (this.db) {
+            this.db.prepare(
+                `INSERT INTO settings (key, value) VALUES ('youtube_cookies_path', ?)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+            ).run(this.cookiesPath);
+        }
+        return { ok: true, cookies_count: cookies.length, path: this.cookiesPath };
     }
 
     // Kill the Chrome window (used by both timeout and explicit cancel)
