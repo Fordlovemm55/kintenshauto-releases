@@ -563,10 +563,63 @@ app.get('/api/stats/daily', asyncHandler(async (req, res) => {
     `).get();
     const inQueue = db.prepare(`SELECT COUNT(*) as n FROM jobs WHERE status = 'pending' OR status = 'running'`).get();
     const pendingReviews = db.prepare(`SELECT COUNT(*) as n FROM jobs WHERE status = 'copyright_waiting'`).get();
+    // Pending Channel-Watcher approvals — table may not exist on legacy DBs, so guard.
+    let pendingApprovals = 0;
+    try {
+        pendingApprovals = db.prepare(
+            `SELECT COUNT(*) as n FROM pending_approvals WHERE status = 'pending'`
+        ).get().n;
+    } catch { /* table absent — watcher not yet initialized */ }
     res.json({
         posted_today: today.posted_today,
         in_queue: inQueue.n,
-        pending_reviews: pendingReviews.n
+        pending_reviews: pendingReviews.n,
+        pending_approvals: pendingApprovals
+    });
+}));
+
+// Home dashboard digest — channel-watcher activity + next scheduled post.
+// One round-trip beats three parallel fetches and keeps HomeView simple.
+app.get('/api/home/digest', asyncHandler(async (req, res) => {
+    // 1) Channels with pending clips — most-recent activity first, capped to 5.
+    let watcherChannels = [];
+    try {
+        watcherChannels = db.prepare(`
+            SELECT wc.id, wc.label, wc.platform, wc.last_checked_at,
+                   COUNT(pa.id) AS pending_count
+            FROM watched_channels wc
+            LEFT JOIN pending_approvals pa
+                   ON pa.watched_id = wc.id AND pa.status = 'pending'
+            GROUP BY wc.id
+            HAVING pending_count > 0
+            ORDER BY wc.last_checked_at DESC NULLS LAST
+            LIMIT 5
+        `).all();
+    } catch { /* tables absent — watcher not initialized */ }
+
+    // 2) Next scheduled post — closest future job in 'pending' status.
+    let nextPost = null;
+    try {
+        nextPost = db.prepare(`
+            SELECT j.id, j.scheduled_at, j.page_id,
+                   p.name AS page_name,
+                   sv.title AS video_title,
+                   c.clip_index
+            FROM jobs j
+            LEFT JOIN clips c ON c.id = j.clip_id
+            LEFT JOIN pages p ON p.id = j.page_id
+            LEFT JOIN scouted_videos sv ON sv.id = c.scouted_id
+            WHERE j.status = 'pending'
+              AND j.scheduled_at IS NOT NULL
+              AND j.scheduled_at >= datetime('now', 'localtime')
+            ORDER BY j.scheduled_at ASC
+            LIMIT 1
+        `).get() || null;
+    } catch { /* schema mismatch — leave null */ }
+
+    res.json({
+        watcher_channels: watcherChannels,
+        next_post: nextPost
     });
 }));
 
@@ -3106,13 +3159,25 @@ process.on('unhandledRejection', (err) => console.error('[unhandled]', err));
         const watcherDownloads = process.env.KINTENSHAUTO_DOWNLOADS || DOWNLOADS_DIR;
         // ✅ ส่ง orchestrator instance ที่มีอยู่แล้ว → channelWatcher จะใช้ pipeline เดิม
         // (slice/banner/caption/peak-schedule) แทนที่จะสร้าง clip+jobs เองแบบ raw
+        // YouTube anti-bot bypass — ใช้ cookies จากเบราเซอร์ที่ user ล็อกอินไว้
+        //   KINTENSHAUTO_YTDLP_BROWSER  = chrome|firefox|edge|brave|opera|vivaldi  (default: chrome)
+        //                                  ตั้ง '' เพื่อปิด (เช่นเมื่อใช้ cookies.txt)
+        //   KINTENSHAUTO_YTDLP_COOKIES  = path ไปยัง cookies.txt (Netscape format)
+        const cookiesFromBrowser = process.env.KINTENSHAUTO_YTDLP_BROWSER === undefined
+            ? 'chrome'
+            : process.env.KINTENSHAUTO_YTDLP_BROWSER;
+        const cookiesFile = process.env.KINTENSHAUTO_YTDLP_COOKIES || '';
+
         const channelWatcher = new ChannelWatcher(DB_PATH, {
             ytDlpPath,
             downloadsRoot: watcherDownloads,
-            orchestrator
+            orchestrator,
+            cookiesFromBrowser,
+            cookiesFile
         });
 
-        console.log('[watcher] initialized | yt-dlp:', ytDlpPath, '| downloads:', watcherDownloads, '| orchestrator: yes');
+        console.log('[watcher] initialized | yt-dlp:', ytDlpPath, '| downloads:', watcherDownloads,
+                    '| orchestrator: yes | cookies:', cookiesFromBrowser || cookiesFile || 'none');
 
         // ---------- API endpoints ----------
         app.get('/api/watcher/meta', (req, res) => {

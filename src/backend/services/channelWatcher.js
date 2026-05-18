@@ -97,6 +97,20 @@ class ChannelWatcher extends EventEmitter {
         this.orchestrator = opts.orchestrator || null;
         this.autoPrepare = opts.autoPrepare !== false;  // legacy: เปิด only when no orchestrator
 
+        // YouTube anti-bot bypass:
+        //   cookiesFromBrowser  → ใช้ cookies จากเบราเซอร์ที่ user ล็อกอินไว้ (chrome|firefox|edge|brave|...)
+        //                        ตั้ง '' หรือ null เพื่อปิด (สำหรับช่องที่ไม่ต้องใช้ cookies)
+        //   cookiesFile         → path ไปยัง cookies.txt (Netscape format) ถ้าไม่ใช้ browser
+        //   extractorArgs       → extra --extractor-args (ปล่อยว่างให้ yt-dlp เลือก client เอง)
+        //
+        // ⚠️ DON'T set extractorArgs to mweb/web by default: those clients now
+        // require a GVS PO Token, without which yt-dlp only returns storyboard
+        // images → "Requested format is not available". yt-dlp's default
+        // (android_vr / tv_simply) handles Shorts + regular videos fine.
+        this.cookiesFromBrowser = opts.cookiesFromBrowser === undefined ? 'chrome' : opts.cookiesFromBrowser;
+        this.cookiesFile = opts.cookiesFile || '';
+        this.extractorArgs = opts.extractorArgs || '';
+
         if (!fs.existsSync(this.channelsDir)) fs.mkdirSync(this.channelsDir, { recursive: true });
 
         this._cronTask = null;
@@ -430,13 +444,26 @@ class ChannelWatcher extends EventEmitter {
      * @returns {Promise<Array>} array ของ metadata object
      */
     _fetchChannelVideos(channelUrl, count) {
+        // Outer wrapper: if Chrome/Firefox locked the cookie DB (user has
+        // the browser open) yt-dlp errors out before even touching YouTube.
+        // Retry the whole chain once without cookies — most public/Shorts
+        // metadata fetches still work because we keep the mweb extractor +
+        // real User-Agent.
+        return this._fetchChannelVideosCore(channelUrl, count, {}).catch(err => {
+            if (!this._isCookieLockError(err.message)) throw err;
+            console.warn(`[ChannelWatcher] cookie DB locked — retrying without cookies (${err.message.slice(0, 100)})`);
+            return this._fetchChannelVideosCore(channelUrl, count, { skipCookies: true });
+        });
+    }
+
+    _fetchChannelVideosCore(channelUrl, count, opts) {
         // YouTube channels with no /videos tab (Shorts-only, Live-only, or
         // music auto-generated channels) cause yt-dlp to return:
         //   "ERROR: [youtube:tab] <handle>: This channel does not have a videos tab"
         // Auto-retry with /shorts → /streams → root URL so the user doesn't
         // have to know in advance which tab the channel uses.
         const isYouTube = /(?:^|\/\/)(?:www\.)?(?:youtube\.com|youtu\.be)\//i.test(channelUrl);
-        if (!isYouTube) return this._fetchChannelVideosOnce(channelUrl, count);
+        if (!isYouTube) return this._fetchChannelVideosOnce(channelUrl, count, opts);
 
         const m = channelUrl.match(/^(.+?)\/(videos|shorts|streams|live|featured)(\/?$)/i);
         const fallbacks = [];
@@ -459,7 +486,7 @@ class ChannelWatcher extends EventEmitter {
             let lastErr;
             for (const url of fallbacks) {
                 try {
-                    const items = await this._fetchChannelVideosOnce(url, count);
+                    const items = await this._fetchChannelVideosOnce(url, count, opts);
                     if (items.length > 0) {
                         if (url !== channelUrl) {
                             console.log(`[ChannelWatcher] _fetchChannelVideos: fell back from "${channelUrl}" to "${url}" (${items.length} items)`);
@@ -469,6 +496,9 @@ class ChannelWatcher extends EventEmitter {
                     lastErr = new Error(`empty playlist from ${url}`);
                 } catch (e) {
                     lastErr = e;
+                    // Cookie-lock bubbles up immediately to the outer retry —
+                    // no point trying tab variants because the issue is local.
+                    if (this._isCookieLockError(e.message)) throw e;
                     // Only keep trying on the specific "no videos tab" / 404 errors;
                     // a real failure (network, timeout) should not waste time on retries.
                     const isTabError = /does not have a (videos|shorts|streams) tab/i.test(e.message)
@@ -481,10 +511,42 @@ class ChannelWatcher extends EventEmitter {
         })();
     }
 
-    _fetchChannelVideosOnce(channelUrl, count) {
+    /**
+     * Args ที่ใช้ร่วมกันทั้ง playlist fetch + full download — ใส่ cookies + extractor fallback
+     * เพื่อแก้ YouTube "Sign in to confirm you're not a bot" error
+     * @param {object} [opts]
+     * @param {boolean} [opts.skipCookies] — ตัด --cookies-from-browser/--cookies ออก
+     *                                        (ใช้ตอน auto-retry เมื่อ Chrome lock DB)
+     * @returns {string[]}
+     */
+    _commonYtDlpArgs(opts = {}) {
+        const args = [];
+        if (!opts.skipCookies) {
+            if (this.cookiesFromBrowser) {
+                args.push('--cookies-from-browser', this.cookiesFromBrowser);
+            } else if (this.cookiesFile) {
+                args.push('--cookies', this.cookiesFile);
+            }
+        }
+        if (this.extractorArgs) {
+            args.push('--extractor-args', this.extractorArgs);
+        }
+        // กัน yt-dlp โดน rate-limit ระบุ User-Agent ของเบราเซอร์จริง
+        args.push('--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        return args;
+    }
+
+    // จับ error "Could not copy Chrome/Firefox/... cookie database" — เกิดตอน user
+    // เปิดเบราเซอร์ค้างไว้ทำให้ yt-dlp อ่าน cookie DB ไม่ได้ (Windows file lock)
+    _isCookieLockError(msg) {
+        return /Could not copy .* cookie database/i.test(String(msg || ''));
+    }
+
+    _fetchChannelVideosOnce(channelUrl, count, opts = {}) {
         const noLimit = !count || count <= 0;
         return new Promise((resolve, reject) => {
             const args = [
+                ...this._commonYtDlpArgs(opts),
                 '--flat-playlist',
                 '--dump-json',
                 '--no-warnings',
@@ -530,12 +592,27 @@ class ChannelWatcher extends EventEmitter {
      * @returns {Promise<{filePath: string}>}
      */
     _downloadFullVideo(sourceUrl, folder, onProgress) {
+        // Wrap with cookie-lock auto-retry — same logic as _fetchChannelVideos
+        return this._downloadFullVideoCore(sourceUrl, folder, onProgress, {}).catch(err => {
+            if (!this._isCookieLockError(err.message)) throw err;
+            console.warn(`[ChannelWatcher] download: cookie DB locked — retrying without cookies`);
+            return this._downloadFullVideoCore(sourceUrl, folder, onProgress, { skipCookies: true });
+        });
+    }
+
+    _downloadFullVideoCore(sourceUrl, folder, onProgress, opts) {
         if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
 
         return new Promise((resolve, reject) => {
             const outTmpl = path.join(folder, '%(id)s.%(ext)s');
             const args = [
-                '-f', 'bv*+ba/best',
+                ...this._commonYtDlpArgs(opts),
+                // 'bv*+ba/b' = best-video + best-audio (separate streams to merge),
+                // OR fallback to 'b' (any single-stream format that has both
+                // video+audio). The 'b' alias is more permissive than 'best'
+                // and is required when the mweb extractor returns combined-only
+                // formats (e.g. some Shorts where dash streams aren't exposed).
+                '-f', 'bv*+ba/b',
                 '--merge-output-format', 'mp4',
                 '-o', outTmpl,
                 '--print', 'after_move:filepath',

@@ -36,6 +36,7 @@ async function api(path, opts = {}) {
 export default function Dashboard({ user }) {
   const [nav, setNav] = useState('home');
   const [stats, setStats] = useState({ posted_today: 0, in_queue: 0, pending_reviews: 0, pending_approvals: 0 });
+  const [digest, setDigest] = useState({ watcher_channels: [], next_post: null });
   const [pages, setPages] = useState([]);
   const [recentJobs, setRecentJobs] = useState([]);
   const [selectedPage, setSelectedPage] = useState(null);
@@ -54,19 +55,30 @@ export default function Dashboard({ user }) {
 
   const refresh = useCallback(async () => {
     try {
-      const [s, p, j] = await Promise.all([
+      const [s, p, j, d] = await Promise.all([
         api('/api/stats/daily').catch(() => ({ posted_today: 0, in_queue: 0, pending_reviews: 0, pending_approvals: 0 })),
         api('/api/pages').catch(() => []),
-        api('/api/jobs/recent?limit=5').catch(() => [])
+        api('/api/jobs/recent?limit=5').catch(() => []),
+        api('/api/home/digest').catch(() => ({ watcher_channels: [], next_post: null }))
       ]);
       setStats(s);
       setPages(p);
       setRecentJobs(j);
+      setDigest(d);
       if (p.length > 0 && !selectedPage) setSelectedPage(p[0].id);
     } catch (e) {
       console.error('refresh failed:', e);
     }
   }, [selectedPage]);
+
+  // Click the injected Channel Watcher nav-item (watcher-injection.js).
+  // The React 'watcher' route was removed (see NAV comment) — the injection
+  // owns the tab end-to-end, so navigation is a synthetic click on its button.
+  const goToWatcher = useCallback(() => {
+    const item = document.querySelector('.nav-item.watcher-nav-injected');
+    if (item) item.click();
+    setSidebarOpen(false);
+  }, []);
 
   useEffect(() => {
     refresh();
@@ -211,9 +223,11 @@ export default function Dashboard({ user }) {
         {nav === 'home' && (
           <HomeView
             stats={stats} pages={pages} recentJobs={recentJobs}
+            digest={digest}
             selectedPage={selectedPage} setSelectedPage={setSelectedPage}
             keyword={keyword} setKeyword={setKeyword}
             startPipeline={startPipeline} running={running}
+            goToWatcher={goToWatcher}
           />
         )}
         {/* nav === 'watcher' handled entirely by public/assets/watcher-injection.js */}
@@ -239,7 +253,7 @@ export default function Dashboard({ user }) {
   );
 }
 
-function HomeView({ stats, pages, recentJobs, selectedPage, setSelectedPage, keyword, setKeyword, startPipeline, running }) {
+function HomeView({ stats, pages, recentJobs, digest, selectedPage, setSelectedPage, keyword, setKeyword, startPipeline, running, goToWatcher }) {
   return (
     <div className="fade-in">
       <div className="home-stat-grid" style={{ marginBottom: 20 }}>
@@ -255,12 +269,29 @@ function HomeView({ stats, pages, recentJobs, selectedPage, setSelectedPage, key
           <div className="stat-value">{stats.in_queue}</div>
           <div className="stat-desc">คลิปในคิว</div>
         </div>
+        <div
+          className={`stat-card clickable ${stats.pending_approvals > 0 ? 'warning' : ''}`}
+          onClick={goToWatcher}
+          role="button" tabIndex={0}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') goToWatcher(); }}
+          aria-label={`รออนุมัติ ${stats.pending_approvals} คลิป — ไปหน้า Channel Watcher`}
+        >
+          <div className="stat-jp">承認</div>
+          <div className="stat-label">รออนุมัติ</div>
+          <div className="stat-value">{stats.pending_approvals}</div>
+          <div className="stat-desc">คลิปใหม่จากช่อง</div>
+        </div>
         <div className={`stat-card ${stats.pending_reviews > 0 ? 'warning' : ''}`}>
           <div className="stat-jp">要確認</div>
           <div className="stat-label">รอตรวจสอบ</div>
           <div className="stat-value">{stats.pending_reviews}</div>
           <div className="stat-desc">ติดลิขสิทธิ์</div>
         </div>
+      </div>
+
+      <div className="home-digest-grid">
+        <ChannelWatcherDigest channels={digest.watcher_channels} goToWatcher={goToWatcher} />
+        <NextPostCountdown nextPost={digest.next_post} />
       </div>
 
       <div className="panel">
@@ -334,6 +365,128 @@ function HomeView({ stats, pages, recentJobs, selectedPage, setSelectedPage, key
       </div>
     </div>
   );
+}
+
+function ChannelWatcherDigest({ channels, goToWatcher }) {
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <div>
+          <div className="label-jp">監視</div>
+          <div className="panel-title">ช่องที่มีคลิปใหม่</div>
+          <div className="panel-subtitle">รอคุณกดอนุมัติเข้าคิว</div>
+        </div>
+        <button className="btn-ghost" onClick={goToWatcher} style={{ fontSize: 11 }}>
+          เปิด Watcher →
+        </button>
+      </div>
+      {channels.length === 0 ? (
+        <div style={{ padding: 20, color: 'var(--text-muted)', textAlign: 'center', fontSize: 12 }}>
+          ไม่มีคลิปใหม่รออนุมัติ
+        </div>
+      ) : (
+        <div>
+          {channels.map(ch => (
+            <div
+              key={ch.id}
+              className="digest-channel-row"
+              onClick={goToWatcher}
+              role="button" tabIndex={0}
+              onKeyDown={e => { if (e.key === 'Enter') goToWatcher(); }}
+            >
+              <div style={{ overflow: 'hidden' }}>
+                <div className="digest-channel-label" title={ch.label}>{ch.label}</div>
+                <div className="digest-channel-meta">
+                  {ch.platform} · ตรวจล่าสุด {formatRelative(ch.last_checked_at)}
+                </div>
+              </div>
+              <span className="badge badge-gold" style={{ fontSize: 11 }}>
+                +{ch.pending_count}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NextPostCountdown({ nextPost }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const iv = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(iv);
+  }, []);
+
+  if (!nextPost) {
+    return (
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <div className="label-jp">次の投稿</div>
+            <div className="panel-title">โพสต์ถัดไป</div>
+          </div>
+        </div>
+        <div className="digest-next-card">
+          <div className="digest-next-countdown" style={{ color: 'var(--text-muted)' }}>—</div>
+          <div className="digest-next-meta">ยังไม่มีคิว · เพิ่มเพจหรืออนุมัติคลิปก่อน</div>
+        </div>
+      </div>
+    );
+  }
+
+  // scheduled_at is local-time string ("YYYY-MM-DD HH:mm:ss") from peakSchedule.toSqlLocal.
+  // new Date parses this as local time on modern browsers.
+  const target = new Date(nextPost.scheduled_at.replace(' ', 'T')).getTime();
+  const diff = target - now;
+  const countdown = diff <= 0 ? 'กำลังจะโพสต์' : formatCountdown(diff);
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <div>
+          <div className="label-jp">次の投稿</div>
+          <div className="panel-title">โพสต์ถัดไป</div>
+        </div>
+      </div>
+      <div className="digest-next-card">
+        <div className="digest-next-countdown">{countdown}</div>
+        <div className="digest-next-meta">
+          เพจ <strong>{nextPost.page_name || '—'}</strong>
+          {nextPost.video_title && <> · {nextPost.video_title}</>}
+          {nextPost.clip_index != null && <> · คลิป {nextPost.clip_index}</>}
+        </div>
+        <div className="digest-next-meta" style={{ opacity: 0.7 }}>
+          เวลา {nextPost.scheduled_at}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// "5 นาทีที่แล้ว" / "2 ชม. ที่แล้ว" — null-safe.
+function formatRelative(sqlLocalTs) {
+  if (!sqlLocalTs) return 'ไม่เคย';
+  const then = new Date(String(sqlLocalTs).replace(' ', 'T')).getTime();
+  if (!Number.isFinite(then)) return 'ไม่เคย';
+  const diff = Date.now() - then;
+  if (diff < 0) return 'อีกสักครู่';
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'เมื่อกี้';
+  if (mins < 60) return `${mins} นาทีก่อน`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} ชม.ก่อน`;
+  return `${Math.floor(hrs / 24)} วันก่อน`;
+}
+
+// Format milliseconds → "HH:MM:SS" (or "MM:SS" when under 1 hour)
+function formatCountdown(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = n => String(n).padStart(2, '0');
+  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
 function PlaceholderView({ section }) {

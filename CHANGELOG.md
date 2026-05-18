@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.0.18] — 2026-05-18
+
+### Fixed — YouTube anti-bot + cookie-lock auto-retry
+- yt-dlp now passes `--cookies-from-browser chrome` + a real-browser
+  User-Agent on every playlist fetch and full download. Resolves the
+  recurring `[youtube] ...: Sign in to confirm you're not a bot` failure
+  that bumped `error_count` on channels with no actual problem.
+- **Auto-retry without cookies** when yt-dlp errors with `Could not copy
+  Chrome cookie database` (Windows file-locks the DB when Chrome is
+  running). Both the playlist-metadata fetch and the full-video download
+  detect this specific error and transparently retry once with cookies
+  disabled — most public/Shorts content still works because yt-dlp's
+  default player client (`android_vr`) doesn't require auth.
+- No `--extractor-args` is passed by default. An earlier attempt forced
+  `youtube:player_client=mweb,web`, which now requires a GVS PO Token —
+  without one yt-dlp only returns storyboard images and downloads fail
+  with "Requested format is not available". The default client picks
+  itself and works fine.
+- Two env-var overrides exposed at backend startup:
+  `KINTENSHAUTO_YTDLP_BROWSER` (browser to read cookies from — default
+  `chrome`; empty string disables) and `KINTENSHAUTO_YTDLP_COOKIES` (path
+  to a Netscape-format `cookies.txt` when not using a browser).
+- Download format selector relaxed from `bv*+ba/best` to `bv*+ba/b` — `b`
+  matches any single-stream format with both audio + video, which is
+  required when an extractor returns combined-only streams.
+
+### Added — Home dashboard digest
+- New fourth stat card "รออนุมัติ" surfaces pending Channel Watcher clips.
+  Click it (or any digest row) to jump straight to the Watcher tab.
+- New panel "ช่องที่มีคลิปใหม่" lists up to 5 channels with pending clips,
+  most-recently-checked first, with a `+N` badge per channel.
+- New panel "โพสต์ถัดไป" shows a live HH:MM:SS countdown to the next
+  scheduled job along with target page, title, and clip index. Falls back
+  to `—` when the queue is empty.
+- Backend `/api/home/digest` returns both blocks in one round-trip; the
+  existing `/api/stats/daily` was extended with `pending_approvals`.
+
+### Changed
+- Channel Watcher row no longer shows the red `error ×N` counter under the
+  status badge. The cumulative count is still tracked in the DB and still
+  auto-disables a channel at 5 failed checks — it just isn't surfaced in
+  the UI anymore.
+
 ## [1.0.17] — 2026-05-17
 
 ### Added — No-AI caption modes

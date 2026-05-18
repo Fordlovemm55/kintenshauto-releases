@@ -845,11 +845,6 @@
           ? el('span', { class: 'badge badge-success' }, 'เปิด')
           : el('span', { class: 'badge badge-danger' }, 'ปิด')
       );
-      if (ch.error_count > 0) {
-        statusCell.appendChild(el('div', {
-          style: 'font-size:10px;color:var(--danger);margin-top:4px'
-        }, 'error ×' + ch.error_count));
-      }
       tr.appendChild(statusCell);
 
       // ✅ FIX: จัดเรียงปุ่มเป็น 2 group แยก — กดผิดยาก
