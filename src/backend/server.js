@@ -3245,6 +3245,22 @@ process.on('unhandledRejection', (err) => console.error('[unhandled]', err));
             res.json(channelWatcher.retryFailed(parseInt(req.params.id, 10)));
         });
 
+        // หลัง user login YouTube ใน Chrome → กด "ตกลง" ในโมดัล →
+        // reset ทุก row ที่ failed ด้วย [NEEDS_YT_LOGIN] marker กลับเป็น pending
+        // และเรียก approve อีกครั้ง (cookies ใหม่จะถูกอ่านจาก Chrome)
+        app.post('/api/watcher/pending/retry-needs-login', asyncHandler(async (req, res) => {
+            const rows = channelWatcher.db.prepare(
+                `SELECT id FROM pending_approvals WHERE status = 'failed' AND download_error LIKE '[NEEDS_YT_LOGIN]%'`
+            ).all();
+            const ids = rows.map(r => r.id);
+            for (const id of ids) channelWatcher.retryFailed(id);
+            // approve ทีละ id (allSettled กัน 1 fail ทำให้ทั้ง batch แตก)
+            const results = await Promise.allSettled(ids.map(id => channelWatcher.approve(id)));
+            const ok = results.filter(r => r.status === 'fulfilled').length;
+            const failed = results.length - ok;
+            res.json({ retried: ids.length, ok, failed });
+        }));
+
         app.post('/api/watcher/pending/approve-all', asyncHandler(async (req, res) => {
             res.json(await channelWatcher.approveAll());
         }));
@@ -3303,6 +3319,7 @@ process.on('unhandledRejection', (err) => console.error('[unhandled]', err));
         channelWatcher.on('channel:baseline_failed',(d) => io.emit('watcher:baseline_failed', d));   // ✅ H3
         channelWatcher.on('approval:done',          (d) => io.emit('watcher:download_done', d));
         channelWatcher.on('approval:failed',        (d) => io.emit('watcher:download_failed', d));
+        channelWatcher.on('approval:needs_youtube_login', (d) => io.emit('watcher:needs_youtube_login', d));
         channelWatcher.on('download:progress',      (d) => io.emit('watcher:download_progress', d));
 
         channelWatcher.start();

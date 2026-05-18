@@ -550,6 +550,15 @@ class ChannelWatcher extends EventEmitter {
         return /cookie|keyring|decrypt cookies|browser cookies/i.test(String(msg || ''));
     }
 
+    // YouTube ปฏิเสธ server-side ขอ login — anonymous retry ก็แก้ไม่ได้
+    // ต้องให้ user login YouTube ใน Chrome แล้วลองใหม่
+    _isYouTubeAuthRequiredError(msg) {
+        const s = String(msg || '');
+        return /Sign in to confirm you'?re not a bot/i.test(s)
+            || /Sign in to confirm your age/i.test(s)
+            || /This video is only available to Music Premium/i.test(s);
+    }
+
     _fetchChannelVideosOnce(channelUrl, count, opts = {}) {
         const noLimit = !count || count <= 0;
         return new Promise((resolve, reject) => {
@@ -1287,10 +1296,15 @@ class ChannelWatcher extends EventEmitter {
                 run_ids: totalRunIds
             });
         } catch (err) {
+            // ตรวจ "Sign in to confirm" → mark ด้วย prefix [NEEDS_YT_LOGIN] ให้ UI
+            // โชว์ modal สอน user ไป login YouTube ใน Chrome แทนที่ error ดิบ
+            const needsLogin = this._isYouTubeAuthRequiredError(err.message);
+            const storedError = (needsLogin ? '[NEEDS_YT_LOGIN] ' : '') + err.message.slice(0, 500);
             this.db.prepare(`
                 UPDATE pending_approvals SET status = 'failed', download_error = ? WHERE id = ?
-            `).run(err.message.slice(0, 500), approvalId);
-            this.emit('approval:failed', { approval_id: approvalId, error: err.message });
+            `).run(storedError, approvalId);
+            const event = needsLogin ? 'approval:needs_youtube_login' : 'approval:failed';
+            this.emit(event, { approval_id: approvalId, error: err.message });
         }
     }
 

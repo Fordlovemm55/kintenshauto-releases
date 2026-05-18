@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.0.21] — 2026-05-18
+
+### Added — YouTube login prompt for age/region-locked clips
+- When a download fails with "Sign in to confirm you're not a bot" (or
+  the age-confirm / Music-Premium variants), the failure is now tagged
+  with a `[NEEDS_YT_LOGIN]` marker in the DB instead of being shown raw.
+- A modal pops up automatically in the Channel Watcher pane explaining
+  what's needed:
+  1. open YouTube via the modal's "🌐 เปิด YouTube" button (uses
+     `shell.openExternal` to the system browser),
+  2. log into the YouTube account whose cookies yt-dlp will read,
+  3. click "✓ ฉัน login แล้ว — ลองใหม่" to batch-retry every flagged
+     pending in one round-trip.
+- Backend exposes `POST /api/watcher/pending/retry-needs-login` that
+  resets every NEEDS_YT_LOGIN pending to `pending` and re-runs
+  `approve()` on each (Promise.allSettled, so one stubborn clip can't
+  break the rest). A new socket event
+  `watcher:needs_youtube_login` is also emitted in real time.
+- The pending row's error text now reads
+  `🔐 ต้อง login YouTube ก่อน — กด "ตกลง" ในกล่องด้านบน` instead of
+  the raw yt-dlp stderr, so the user sees actionable guidance.
+- Dismissing the modal ("ยกเลิก") suppresses re-opening until a NEW
+  flagged failure shows up, so polling doesn't spam the modal.
+
 ## [1.0.20] — 2026-05-18
 
 ### Fixed — yt-dlp fallback is now unconditional when cookies fail
