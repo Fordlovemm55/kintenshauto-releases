@@ -584,13 +584,14 @@ ipcMain.handle('app:openLogs', () => shell.openPath(LOG_DIR));
 // ---- Auto-updater (only enabled when a publish URL is configured at build time) ----
 function setupAutoUpdater() {
     if (!app.isPackaged) return;
-    // Private GitHub release auth — electron-updater reads GH_TOKEN automatically
-    // for the GitHub provider. Embedded here because users can't pre-set the env
-    // var. Token is scoped to read-only on a single private release repo, so
-    // exposure risk is "anyone with the installer can list/download our release
-    // artifacts" — acceptable for an internal-distribution tool.
-    if (!process.env.GH_TOKEN) {
-        process.env.GH_TOKEN = 'REDACTED_GH_PAT';
+    // GitHub release auth — kintenshauto-releases is a public repo, so
+    // anonymous fetch works. Sending an Authorization header with a revoked
+    // token returns 401, so we DROP the placeholder if it survived the
+    // release-script injection (e.g. local --dir builds, or a build that
+    // skipped scripts/release.js entirely). Real tokens are kept in case
+    // the repo ever gets toggled back to private.
+    if (process.env.GH_TOKEN === 'REDACTED_GH_PAT' || !process.env.GH_TOKEN) {
+        delete process.env.GH_TOKEN;
     }
     let autoUpdater;
     try {

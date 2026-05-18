@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.0.19] — 2026-05-18
+
+### Fixed — Auto-update no longer breaks when the release PAT is revoked
+- `publish.private` flipped from `true` to `false` in `package.json`. The
+  generated `app-update.yml` shipped with every install told
+  electron-updater "this repo is private, always send Authorization", which
+  forced it to use the embedded GH_TOKEN. Once that token was revoked
+  post-release (standard hygiene), every installed copy of the app got
+  HTTP 401 on auto-update and could never reach the next version.
+- `electron/main.js` now **drops** the GH_TOKEN env var entirely when only
+  the placeholder is present (e.g. local `--dir` builds). Anonymous fetch
+  works against the public release repo and stops sending a bad
+  Authorization header.
+- `scripts/release.js` no longer injects the token into the installer at
+  build time. The token is still required at build time for electron-
+  builder's `--publish always` to create the release and upload assets,
+  but it is no longer baked into the shipped `.exe`. Rotating the token
+  now only affects whoever publishes next — installed users are
+  unaffected.
+
+### Migration note
+- Installed copies of v1.0.17 and v1.0.18 still carry an embedded PAT in
+  their main process and will fail auto-update once that PAT is revoked.
+  Those users need to manually install v1.0.19 once
+  (`https://github.com/Fordlovemm55/kintenshauto-releases/releases/latest`).
+  All updates from v1.0.19 onwards work without any token.
+
 ## [1.0.18] — 2026-05-18
 
 ### Fixed — YouTube anti-bot + cookie-lock auto-retry

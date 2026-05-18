@@ -1,6 +1,6 @@
 {
   "name": "kintenshauto",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "description": "KINTENSHAUTO - เครื่องมือโพสต์ Reel อัตโนมัติสำหรับ Facebook",
   "main": "electron/main.js",
   "author": "KINTENSHAUTO Team",
@@ -71,7 +71,7 @@
         "provider": "github",
         "owner": "Fordlovemm55",
         "repo": "kintenshauto-releases",
-        "private": true,
+        "private": false,
         "releaseType": "release"
       }
     ],
