@@ -552,11 +552,19 @@ class ChannelWatcher extends EventEmitter {
 
     // YouTube ปฏิเสธ server-side ขอ login — anonymous retry ก็แก้ไม่ได้
     // ต้องให้ user login YouTube ใน Chrome แล้วลองใหม่
+    //
+    // ⚠️ ใช้ pattern ที่ resilient ต่อ encoding bug:
+    //   yt-dlp ส่ง Unicode apostrophe (’ U+2019) ใน "you're"
+    //   บางเครื่อง stdout codepage ผิด → bytes ไม่ใช่ UTF-8 valid
+    //   → Node decode ได้ "you�re" (มี replacement char)
+    //   pattern แบบหละหลวมใช้ ".*" ระหว่างจุดยึด แทนการเจาะจง "you're"
     _isYouTubeAuthRequiredError(msg) {
         const s = String(msg || '');
-        return /Sign in to confirm you'?re not a bot/i.test(s)
-            || /Sign in to confirm your age/i.test(s)
-            || /This video is only available to Music Premium/i.test(s);
+        return /Sign in to confirm.{0,30}not a bot/is.test(s)
+            || /Sign in to confirm.{0,20}your age/is.test(s)
+            || /confirm your age/is.test(s)
+            || /This video is only available to Music Premium/i.test(s)
+            || /Use --cookies-from-browser or --cookies for the authentication/i.test(s);
     }
 
     _fetchChannelVideosOnce(channelUrl, count, opts = {}) {

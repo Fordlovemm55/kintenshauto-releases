@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 const API = 'http://localhost:3003';
 
@@ -95,9 +95,124 @@ export default function SettingsView({ showToast, user }) {
   return (
     <div className="fade-in">
       <AccountSection user={user} showToast={showToast} />
+      <YouTubeLoginSection showToast={showToast} />
       <AIKeysSection showToast={showToast} />
       <SettingsSections showToast={showToast} />
       <MaintenanceSection showToast={showToast} />
+    </div>
+  );
+}
+
+// ============================================================
+// YouTube login — captures cookies into a dedicated Chrome profile
+// so yt-dlp can use --cookies <file> on every download.
+// ============================================================
+function YouTubeLoginSection({ showToast }) {
+  const [status, setStatus] = useState({ logged_in: false });
+  const [busy, setBusy] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      const r = await fetch('http://localhost:3003/api/system/youtube-login-status');
+      setStatus(await r.json());
+    } catch (e) {
+      setStatus({ logged_in: false });
+    }
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const onLogin = async () => {
+    setBusy(true);
+    showToast('เปิดหน้าต่าง Chrome', 'กรุณา login YouTube ในหน้าต่างที่เด้งขึ้นมา', 'info');
+    try {
+      const r = await fetch('http://localhost:3003/api/system/youtube-login', { method: 'POST' });
+      const data = await r.json();
+      if (data.ok) {
+        showToast('Login สำเร็จ', `บันทึก ${data.cookies_count || 0} cookies — yt-dlp ใช้ได้ทุกคลิปแล้ว`, 'success');
+      } else {
+        showToast('Login ไม่สำเร็จ', data.error || 'ไม่ทราบสาเหตุ', 'danger');
+      }
+    } catch (e) {
+      showToast('Login ไม่สำเร็จ', e.message, 'danger');
+    } finally {
+      setBusy(false);
+      refresh();
+    }
+  };
+
+  const onCancel = async () => {
+    try { await fetch('http://localhost:3003/api/system/youtube-login-cancel', { method: 'POST' }); }
+    catch {}
+    setBusy(false);
+  };
+
+  const onLogout = async () => {
+    if (!confirm('Logout YouTube? — ระบบจะลบ cookies ออก และคลิปที่ต้อง auth อาจดูดไม่ได้')) return;
+    try {
+      await fetch('http://localhost:3003/api/system/youtube-logout', { method: 'POST' });
+      showToast('Logout สำเร็จ', 'ลบ YouTube cookies แล้ว', 'success');
+      refresh();
+    } catch (e) {
+      showToast('Logout ไม่สำเร็จ', e.message, 'danger');
+    }
+  };
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <div>
+          <div className="label-jp">YT認証 · YOUTUBE LOGIN</div>
+          <div className="panel-title">YouTube Login</div>
+          <div className="panel-subtitle">
+            login บัญชี Google ใน Chrome เฉพาะของแอปเพื่อให้ yt-dlp ใช้ cookies ดูดคลิป
+            ที่ต้อง auth (18+ / region-locked / Music Premium) ได้
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center',
+                    padding: '14px 18px', background: 'var(--surface-2)',
+                    border: '0.5px solid var(--border-soft)' }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          {status.logged_in ? (
+            <>
+              <div style={{ fontSize: 14, color: 'var(--success)', fontWeight: 500 }}>
+                ✓ Login แล้ว
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                บันทึกล่าสุด: {status.last_login_at
+                  ? new Date(status.last_login_at).toLocaleString('th-TH')
+                  : '—'}
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 14, color: 'var(--danger)', fontWeight: 500 }}>
+                ❌ ยังไม่ Login
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                คลิป YouTube บางตัวอาจดูดไม่ได้จนกว่าจะ login
+              </div>
+            </>
+          )}
+        </div>
+
+        {busy ? (
+          <>
+            <span style={{ fontSize: 12, color: 'var(--gold)' }}>⏳ รอ login ในหน้าต่าง Chrome...</span>
+            <button className="btn-ghost" onClick={onCancel}>ยกเลิก</button>
+          </>
+        ) : status.logged_in ? (
+          <>
+            <button className="btn-ghost" onClick={onLogin}>↻ Login ใหม่</button>
+            <button className="btn-ghost" onClick={onLogout}
+                    style={{ color: 'var(--danger)' }}>🗑 Logout</button>
+          </>
+        ) : (
+          <button className="btn-primary" onClick={onLogin}>🔐 Login YouTube</button>
+        )}
+      </div>
     </div>
   );
 }

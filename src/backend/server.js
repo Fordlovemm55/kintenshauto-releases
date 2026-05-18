@@ -3157,16 +3157,27 @@ process.on('unhandledRejection', (err) => console.error('[unhandled]', err));
 
         const ytDlpPath = findYtDlp();
         const watcherDownloads = process.env.KINTENSHAUTO_DOWNLOADS || DOWNLOADS_DIR;
-        // ✅ ส่ง orchestrator instance ที่มีอยู่แล้ว → channelWatcher จะใช้ pipeline เดิม
-        // (slice/banner/caption/peak-schedule) แทนที่จะสร้าง clip+jobs เองแบบ raw
-        // YouTube anti-bot bypass — ใช้ cookies จากเบราเซอร์ที่ user ล็อกอินไว้
-        //   KINTENSHAUTO_YTDLP_BROWSER  = chrome|firefox|edge|brave|opera|vivaldi  (default: chrome)
-        //                                  ตั้ง '' เพื่อปิด (เช่นเมื่อใช้ cookies.txt)
-        //   KINTENSHAUTO_YTDLP_COOKIES  = path ไปยัง cookies.txt (Netscape format)
-        const cookiesFromBrowser = process.env.KINTENSHAUTO_YTDLP_BROWSER === undefined
-            ? 'chrome'
-            : process.env.KINTENSHAUTO_YTDLP_BROWSER;
-        const cookiesFile = process.env.KINTENSHAUTO_YTDLP_COOKIES || '';
+
+        // YouTube cookies precedence (most specific wins):
+        //   1. KINTENSHAUTO_YTDLP_COOKIES env (explicit override)
+        //   2. settings.youtube_cookies_path  (set by Settings → "Login YouTube" flow)
+        //   3. KINTENSHAUTO_YTDLP_BROWSER env (browser to read cookies from)
+        //   4. default --cookies-from-browser chrome
+        const envCookiesFile = process.env.KINTENSHAUTO_YTDLP_COOKIES || '';
+        let settingsCookiesFile = '';
+        try {
+            const r = db.prepare(`SELECT value FROM settings WHERE key = 'youtube_cookies_path'`).get();
+            if (r?.value && fs.existsSync(r.value)) settingsCookiesFile = r.value;
+        } catch { /* table missing or DB busy */ }
+        const cookiesFile = envCookiesFile || settingsCookiesFile;
+        // If we have a cookies file, prefer it — leave cookiesFromBrowser
+        // empty so we don't double-up auth (yt-dlp would still try the
+        // browser even with a cookies file present)
+        const cookiesFromBrowser = cookiesFile
+            ? ''
+            : (process.env.KINTENSHAUTO_YTDLP_BROWSER === undefined
+                ? 'chrome'
+                : process.env.KINTENSHAUTO_YTDLP_BROWSER);
 
         const channelWatcher = new ChannelWatcher(DB_PATH, {
             ytDlpPath,
@@ -3175,6 +3186,54 @@ process.on('unhandledRejection', (err) => console.error('[unhandled]', err));
             cookiesFromBrowser,
             cookiesFile
         });
+        // Allow the YouTube-login endpoints to switch the cookies file at runtime
+        // without restarting the backend — see /api/system/youtube-login below.
+        channelWatcher.refreshCookiesFromSettings = () => {
+            try {
+                const r = db.prepare(`SELECT value FROM settings WHERE key = 'youtube_cookies_path'`).get();
+                const newPath = (r?.value && fs.existsSync(r.value)) ? r.value : '';
+                channelWatcher.cookiesFile = newPath;
+                channelWatcher.cookiesFromBrowser = newPath ? '' : 'chrome';
+            } catch { /* swallow */ }
+        };
+
+        // ============================================================
+        // YOUTUBE LOGIN — dedicated profile + cookies.txt for yt-dlp
+        // ============================================================
+        const { YouTubeLoginService } = require('./services/youtubeLogin');
+        const ytLoginService = new YouTubeLoginService({
+            userDataRoot: USER_DATA,
+            cookiesPath: path.join(USER_DATA, 'youtube-cookies.txt'),
+            db
+        });
+
+        app.get('/api/system/youtube-login-status', (req, res) => {
+            res.json(ytLoginService.getStatus());
+        });
+
+        app.post('/api/system/youtube-login', asyncHandler(async (req, res) => {
+            try {
+                const result = await ytLoginService.login({
+                    onLog: (m) => console.log('[ytLogin]', m)
+                });
+                channelWatcher.refreshCookiesFromSettings();
+                res.json(result);
+            } catch (e) {
+                console.error('[ytLogin] failed:', e.message);
+                res.status(500).json({ ok: false, error: e.message });
+            }
+        }));
+
+        app.post('/api/system/youtube-login-cancel', (req, res) => {
+            ytLoginService.closeWindow();
+            res.json({ ok: true });
+        });
+
+        app.post('/api/system/youtube-logout', asyncHandler(async (req, res) => {
+            const r = await ytLoginService.logout();
+            channelWatcher.refreshCookiesFromSettings();
+            res.json(r);
+        }));
 
         console.log('[watcher] initialized | yt-dlp:', ytDlpPath, '| downloads:', watcherDownloads,
                     '| orchestrator: yes | cookies:', cookiesFromBrowser || cookiesFile || 'none');

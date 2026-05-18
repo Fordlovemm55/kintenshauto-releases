@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.0.22] — 2026-05-18
+
+### Added — Dedicated YouTube login flow + cookies.txt
+- New service `youtubeLogin.js` spawns Chrome with a profile dir that is
+  separate from the user's real browser, points it at
+  `accounts.google.com/ServiceLogin?service=youtube`, polls for SAPISID
+  cookies, and writes every google.com / youtube.com cookie to a
+  Netscape-format `youtube-cookies.txt`. `ChannelWatcher` reads the path
+  from `settings.youtube_cookies_path` and switches yt-dlp to
+  `--cookies <path>` whenever the file exists (more reliable than
+  `--cookies-from-browser`, which fails on locked Chrome / missing
+  profiles / decrypt errors).
+- Three new endpoints expose the lifecycle:
+  - `GET  /api/system/youtube-login-status`
+  - `POST /api/system/youtube-login`        (blocks until logged in)
+  - `POST /api/system/youtube-login-cancel` (closes the Chrome window)
+  - `POST /api/system/youtube-logout`       (wipes cookies + profile)
+- Settings panel gains a "YouTube Login" section with status, "Login",
+  "Re-login", and "Logout" buttons. Toast feedback on success/fail.
+- App boot now gates Dashboard behind a `YouTubeLoginRequiredScreen` —
+  if no cookies are captured yet, the user MUST click "Login YouTube"
+  to proceed. Same shape as the existing deps gate.
+
+### Fixed — Modal regex no longer misses encoding-mangled apostrophes
+- The "Sign in to confirm you're not a bot" detector used `you'?re`
+  which missed yt-dlp output where the Unicode apostrophe (U+2019)
+  decoded into `you�re` due to a stdout codepage mismatch on some
+  Windows installs. Pattern relaxed to `Sign in to confirm.*not a bot`
+  plus a fallback that matches the `Use --cookies-from-browser` hint
+  line that yt-dlp emits with this error class.
+
 ## [1.0.21] — 2026-05-18
 
 ### Added — YouTube login prompt for age/region-locked clips
