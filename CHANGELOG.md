@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.20] — 2026-05-18
+
+### Fixed — yt-dlp fallback is now unconditional when cookies fail
+- The cookie-loading retry path used to match a specific error string
+  (`Could not copy ... cookie database`). That covered users running
+  Chrome at the same time as the app but missed everything else:
+  Chrome not installed at all, cookie DB present but profile name
+  mismatch, DPAPI decrypt failures, sandboxed-keychain errors on locked
+  Windows accounts. Affected users saw yt-dlp fail on every channel.
+- New behavior: if `--cookies-from-browser` (or `--cookies`) is
+  configured and the first yt-dlp call returns any non-zero exit, the
+  request is retried once with cookies disabled. Anonymous fetch works
+  on most public/Shorts content via yt-dlp's default android_vr client,
+  so users with no Chrome (or a Chrome that yt-dlp can't read for any
+  reason) now succeed on the retry instead of failing outright.
+
 ## [1.0.19] — 2026-05-18
 
 ### Fixed — Auto-update no longer breaks when the release PAT is revoked

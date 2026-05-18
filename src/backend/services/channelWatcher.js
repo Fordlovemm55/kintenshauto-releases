@@ -444,14 +444,18 @@ class ChannelWatcher extends EventEmitter {
      * @returns {Promise<Array>} array ของ metadata object
      */
     _fetchChannelVideos(channelUrl, count) {
-        // Outer wrapper: if Chrome/Firefox locked the cookie DB (user has
-        // the browser open) yt-dlp errors out before even touching YouTube.
-        // Retry the whole chain once without cookies — most public/Shorts
-        // metadata fetches still work because we keep the mweb extractor +
-        // real User-Agent.
+        // Outer wrapper: yt-dlp's --cookies-from-browser has many failure
+        // modes (Chrome locked, Chrome not installed, profile missing,
+        // DPAPI decrypt failed, wrong browser variant). Rather than match
+        // every error string, just retry the whole chain WITHOUT cookies
+        // whenever the first attempt fails AND we were using cookies in
+        // the first place. The retry is a no-op on a system with no cookie
+        // config — and on YouTube most public/Shorts metadata works
+        // without auth thanks to yt-dlp's default android_vr client.
+        const usingCookies = !!(this.cookiesFromBrowser || this.cookiesFile);
         return this._fetchChannelVideosCore(channelUrl, count, {}).catch(err => {
-            if (!this._isCookieLockError(err.message)) throw err;
-            console.warn(`[ChannelWatcher] cookie DB locked — retrying without cookies (${err.message.slice(0, 100)})`);
+            if (!usingCookies) throw err;
+            console.warn(`[ChannelWatcher] cookies path failed — retrying anonymously (${err.message.slice(0, 120)})`);
             return this._fetchChannelVideosCore(channelUrl, count, { skipCookies: true });
         });
     }
@@ -498,7 +502,7 @@ class ChannelWatcher extends EventEmitter {
                     lastErr = e;
                     // Cookie-lock bubbles up immediately to the outer retry —
                     // no point trying tab variants because the issue is local.
-                    if (this._isCookieLockError(e.message)) throw e;
+                    if (this._isCookieRelatedError(e.message)) throw e;
                     // Only keep trying on the specific "no videos tab" / 404 errors;
                     // a real failure (network, timeout) should not waste time on retries.
                     const isTabError = /does not have a (videos|shorts|streams) tab/i.test(e.message)
@@ -536,10 +540,14 @@ class ChannelWatcher extends EventEmitter {
         return args;
     }
 
-    // จับ error "Could not copy Chrome/Firefox/... cookie database" — เกิดตอน user
-    // เปิดเบราเซอร์ค้างไว้ทำให้ yt-dlp อ่าน cookie DB ไม่ได้ (Windows file lock)
-    _isCookieLockError(msg) {
-        return /Could not copy .* cookie database/i.test(String(msg || ''));
+    // ดู error message ว่าเกี่ยวกับ --cookies-from-browser หรือไม่ — ครอบคลุม:
+    //   "Could not copy Chrome cookie database"     (Chrome เปิดอยู่ → Windows lock DB)
+    //   "could not find chrome cookies database"    (Chrome ไม่ได้ติดตั้ง)
+    //   "Could not decrypt cookies"                 (DPAPI/keychain decrypt fail)
+    //   "Failed to load cookies from <browser>"     (profile หาย / format เปลี่ยน)
+    //   "no supported config name found"            (browser variant ไม่ match)
+    _isCookieRelatedError(msg) {
+        return /cookie|keyring|decrypt cookies|browser cookies/i.test(String(msg || ''));
     }
 
     _fetchChannelVideosOnce(channelUrl, count, opts = {}) {
@@ -592,10 +600,12 @@ class ChannelWatcher extends EventEmitter {
      * @returns {Promise<{filePath: string}>}
      */
     _downloadFullVideo(sourceUrl, folder, onProgress) {
-        // Wrap with cookie-lock auto-retry — same logic as _fetchChannelVideos
+        // Same retry rationale as _fetchChannelVideos — broad fallback over
+        // every possible cookies-from-browser failure mode.
+        const usingCookies = !!(this.cookiesFromBrowser || this.cookiesFile);
         return this._downloadFullVideoCore(sourceUrl, folder, onProgress, {}).catch(err => {
-            if (!this._isCookieLockError(err.message)) throw err;
-            console.warn(`[ChannelWatcher] download: cookie DB locked — retrying without cookies`);
+            if (!usingCookies) throw err;
+            console.warn(`[ChannelWatcher] download cookies path failed — retrying anonymously (${err.message.slice(0, 120)})`);
             return this._downloadFullVideoCore(sourceUrl, folder, onProgress, { skipCookies: true });
         });
     }
