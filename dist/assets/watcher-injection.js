@@ -145,6 +145,106 @@
   }
 
   // ============================================================
+  // YOUTUBE LOGIN MODAL
+  // เมื่อ yt-dlp เจอ "Sign in to confirm you're not a bot" — anonymous retry
+  // ก็ไม่ผ่าน — โชว์โมดัลให้ user เปิด YouTube login แล้วกด "ตกลง" ลองใหม่
+  // ============================================================
+  let _ytLoginModalNode = null;
+  let _ytLoginUserDismissed = false;  // user กดยกเลิก → ไม่ auto-เด้งอีกจนกว่าจะมี fail ใหม่
+  let _ytLoginLastFailKey = '';        // ใช้ track ว่ามี fail ใหม่หลัง user dismiss หรือยัง
+
+  function _maybeShowYouTubeLoginModal(pending) {
+    const needsLogin = (pending || []).filter(p =>
+      p.status === 'failed' && /^\[NEEDS_YT_LOGIN\]/.test(p.download_error || '')
+    );
+    if (needsLogin.length === 0) {
+      _ytLoginUserDismissed = false;  // เคลียร์ flag เมื่อไม่มีคลิป fail แล้ว
+      _ytLoginLastFailKey = '';
+      return;
+    }
+    // ถ้า user เพิ่ง dismiss + ไม่มี fail ใหม่ → ไม่เด้งซ้ำ
+    const key = needsLogin.map(p => p.id).sort((a, b) => a - b).join(',');
+    if (_ytLoginUserDismissed && key === _ytLoginLastFailKey) return;
+    _ytLoginLastFailKey = key;
+    _ytLoginUserDismissed = false;
+    _showYouTubeLoginModal(needsLogin);
+  }
+
+  function _showYouTubeLoginModal(items) {
+    if (_ytLoginModalNode) return;  // เปิดอยู่แล้ว
+    const overlay = document.createElement('div');
+    overlay.style.cssText =
+      'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:99999;' +
+      'display:flex;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(4px)';
+    const card = document.createElement('div');
+    card.style.cssText =
+      'max-width:520px;width:100%;background:var(--surface-1);border:1px solid var(--gold);' +
+      'box-shadow:0 24px 48px rgba(0,0,0,0.6);padding:28px 32px;color:var(--text-primary);font-size:14px';
+    const titleRow = document.createElement('div');
+    titleRow.innerHTML =
+      '<div style="font-size:11px;letter-spacing:4px;color:var(--gold);margin-bottom:6px">認証 · YOUTUBE LOGIN</div>' +
+      '<div style="font-size:20px;font-weight:600;margin-bottom:12px">ต้อง login YouTube ก่อนดาวน์โหลด</div>' +
+      '<div style="font-size:13px;line-height:1.6;color:var(--text-muted);margin-bottom:8px">YouTube แจ้งว่า "Sign in to confirm you\'re not a bot" สำหรับ ' + items.length + ' คลิป<br>วิธีแก้:</div>' +
+      '<ol style="font-size:13px;line-height:1.8;margin:0 0 18px 22px;color:var(--text-primary)">' +
+        '<li>กดปุ่ม "🌐 เปิด YouTube" ด้านล่าง</li>' +
+        '<li>Login บัญชี YouTube ของคุณใน Chrome</li>' +
+        '<li>กลับมาที่นี่แล้วกด "✓ ฉัน login แล้ว — ลองใหม่"</li>' +
+      '</ol>';
+    card.appendChild(titleRow);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;margin-top:18px';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn-ghost';
+    cancelBtn.textContent = 'ยกเลิก';
+    cancelBtn.onclick = () => {
+      _ytLoginUserDismissed = true;
+      _closeYouTubeLoginModal();
+    };
+
+    const openBtn = document.createElement('button');
+    openBtn.className = 'btn-ghost';
+    openBtn.textContent = '🌐 เปิด YouTube';
+    openBtn.onclick = () => {
+      try { window.kintenshauto?.openExternal?.('https://www.youtube.com/'); }
+      catch (e) { console.warn('openExternal failed', e); }
+    };
+
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'btn-primary';
+    retryBtn.textContent = '✓ ฉัน login แล้ว — ลองใหม่';
+    retryBtn.onclick = async () => {
+      retryBtn.disabled = true;
+      retryBtn.textContent = '⏳ กำลังลองใหม่...';
+      try {
+        const r = await api('/api/watcher/pending/retry-needs-login', { method: 'POST' });
+        showToast('เริ่มดาวน์โหลดใหม่', `เริ่ม ${r.retried} คลิป (ผ่าน ${r.ok}, ติด ${r.failed})`, r.failed === 0 ? 'success' : 'info');
+        _closeYouTubeLoginModal();
+        await refresh();
+      } catch (e) {
+        showToast('ลองใหม่ไม่สำเร็จ', e.message || 'ติดปัญหา', 'danger');
+        retryBtn.disabled = false;
+        retryBtn.textContent = '✓ ฉัน login แล้ว — ลองใหม่';
+      }
+    };
+
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(openBtn);
+    btnRow.appendChild(retryBtn);
+    card.appendChild(btnRow);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    _ytLoginModalNode = overlay;
+  }
+
+  function _closeYouTubeLoginModal() {
+    if (!_ytLoginModalNode) return;
+    _ytLoginModalNode.remove();
+    _ytLoginModalNode = null;
+  }
+
+  // ============================================================
   // SIDEBAR INJECTION
   // ============================================================
   function injectNavItem() {
@@ -403,6 +503,7 @@
       ]);
       state = { channels: c, pending: p, pages: pg };
       updateBadge();
+      _maybeShowYouTubeLoginModal(p);
       // ✅ FIX flicker: render เฉพาะถ้ามีอะไรเปลี่ยน
       const newHash = hashState(state);
       const changed = newHash !== lastStateHash;
@@ -1132,9 +1233,15 @@
       ));
       body.appendChild(wrap);
     } else if (status === 'failed') {
+      // ซ่อน [NEEDS_YT_LOGIN] prefix — สำหรับเคสนี้ user เห็น modal popup อยู่แล้ว
+      // แสดงข้อความสั้นๆ แทน error ดิบของ yt-dlp
+      let errText = p.download_error || 'unknown error';
+      if (/^\[NEEDS_YT_LOGIN\]/.test(errText)) {
+        errText = '🔐 ต้อง login YouTube ก่อน — กด "ตกลง" ในกล่องด้านบน หรือเปิดใหม่ที่ลิงก์';
+      }
       body.appendChild(el('div', {
         style: 'font-size:11px;color:var(--danger);margin-bottom:6px;padding:6px;background:rgba(232,123,123,.08);border-radius:2px;max-height:60px;overflow:auto'
-      }, '✗ ' + (p.download_error || 'unknown error')));
+      }, '✗ ' + errText));
       body.appendChild(el('div', { class: 'pc-actions' },
         el('button', {
           class: 'btn-ghost', style: 'flex:1;border-color:var(--gold);color:var(--gold)',

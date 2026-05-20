@@ -444,20 +444,18 @@ class ChannelWatcher extends EventEmitter {
      * @returns {Promise<Array>} array ของ metadata object
      */
     _fetchChannelVideos(channelUrl, count) {
-        // Outer wrapper: yt-dlp's --cookies-from-browser has many failure
-        // modes (Chrome locked, Chrome not installed, profile missing,
-        // DPAPI decrypt failed, wrong browser variant). Rather than match
-        // every error string, just retry the whole chain WITHOUT cookies
-        // whenever the first attempt fails AND we were using cookies in
-        // the first place. The retry is a no-op on a system with no cookie
-        // config — and on YouTube most public/Shorts metadata works
-        // without auth thanks to yt-dlp's default android_vr client.
-        const usingCookies = !!(this.cookiesFromBrowser || this.cookiesFile);
-        return this._fetchChannelVideosCore(channelUrl, count, {}).catch(err => {
-            if (!usingCookies) throw err;
-            console.warn(`[ChannelWatcher] cookies path failed — retrying anonymously (${err.message.slice(0, 120)})`);
-            return this._fetchChannelVideosCore(channelUrl, count, { skipCookies: true });
-        });
+        // RETRY CHAIN (after v1.0.23 + manual testing):
+        //   1) anonymous (no cookies, no PO Token) — fastest, works for 90%+
+        //   2) anonymous + PO Token (proof-of-origin)  — bypass YT bot-block
+        //                                                 helps when VPN-tagged
+        //                                                 IP gets restricted formats
+        //   3) cookies — last resort for age/region/auth-required clips
+        //
+        // ⚠️ Don't force player_client. android_vr (default) returns real
+        //    formats; web/mweb/tv require additional state we can't fake.
+        return this._tryWithFallbacks(
+            (opts) => this._fetchChannelVideosCore(channelUrl, count, opts)
+        );
     }
 
     _fetchChannelVideosCore(channelUrl, count, opts) {
@@ -516,11 +514,11 @@ class ChannelWatcher extends EventEmitter {
     }
 
     /**
-     * Args ที่ใช้ร่วมกันทั้ง playlist fetch + full download — ใส่ cookies + extractor fallback
-     * เพื่อแก้ YouTube "Sign in to confirm you're not a bot" error
+     * Args ที่ใช้ร่วมกันทั้ง playlist fetch + full download
      * @param {object} [opts]
-     * @param {boolean} [opts.skipCookies] — ตัด --cookies-from-browser/--cookies ออก
-     *                                        (ใช้ตอน auto-retry เมื่อ Chrome lock DB)
+     * @param {boolean} [opts.skipCookies]    — ไม่ใส่ --cookies/--cookies-from-browser
+     * @param {string}  [opts.poToken]        — pass-through ค่า PO Token (จะแปะให้ extractor-args)
+     * @param {string}  [opts.visitorData]    — pass-through ค่า visitor_data
      * @returns {string[]}
      */
     _commonYtDlpArgs(opts = {}) {
@@ -532,10 +530,19 @@ class ChannelWatcher extends EventEmitter {
                 args.push('--cookies', this.cookiesFile);
             }
         }
-        if (this.extractorArgs) {
-            args.push('--extractor-args', this.extractorArgs);
+        // Build extractor-args: combine PO Token + existing config (ถ้ามี)
+        const extraParts = [];
+        if (opts.poToken) {
+            // ใช้ scope mweb.gvs (gvs = Google Video Server, ที่ stream ตัวจริงอยู่)
+            // ⚠️ ห้าม force player_client — ปล่อยให้ yt-dlp เลือก android_vr default
+            //    เพราะ web/mweb/tv ทุกตัวต้องใช้ token + auth + caché → storyboard only
+            extraParts.push(`youtube:po_token=mweb.gvs+${opts.poToken}`);
+            if (opts.visitorData) extraParts.push(`youtube:visitor_data=${opts.visitorData}`);
         }
-        // กัน yt-dlp โดน rate-limit ระบุ User-Agent ของเบราเซอร์จริง
+        if (this.extractorArgs) extraParts.push(this.extractorArgs);
+        if (extraParts.length) args.push('--extractor-args', extraParts.join(','));
+
+        // ปลอม User-Agent เป็นเบราเซอร์จริง — yt-dlp default UA โดน rate-limit
         args.push('--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
         return args;
     }
@@ -617,14 +624,71 @@ class ChannelWatcher extends EventEmitter {
      * @returns {Promise<{filePath: string}>}
      */
     _downloadFullVideo(sourceUrl, folder, onProgress) {
-        // Same retry rationale as _fetchChannelVideos — broad fallback over
-        // every possible cookies-from-browser failure mode.
-        const usingCookies = !!(this.cookiesFromBrowser || this.cookiesFile);
-        return this._downloadFullVideoCore(sourceUrl, folder, onProgress, {}).catch(err => {
-            if (!usingCookies) throw err;
-            console.warn(`[ChannelWatcher] download cookies path failed — retrying anonymously (${err.message.slice(0, 120)})`);
-            return this._downloadFullVideoCore(sourceUrl, folder, onProgress, { skipCookies: true });
-        });
+        // Mirror _fetchChannelVideos's 3-stage retry chain
+        return this._tryWithFallbacks(
+            (opts) => this._downloadFullVideoCore(sourceUrl, folder, onProgress, opts)
+        );
+    }
+
+    // Wraps an attempt fn with 3 retry layers — anonymous, PO Token, cookies.
+    // Each layer only fires if the previous one hit a "YouTube wants more
+    // proof" error (Sign in / Requested format / storyboard-only).
+    async _tryWithFallbacks(attemptFn) {
+        const hasCookies = !!(this.cookiesFromBrowser || this.cookiesFile);
+        const provider = this._getPOTokenProvider();
+
+        // Stage 1: anonymous + no PO Token (cheapest, fastest)
+        try {
+            return await attemptFn({ skipCookies: true });
+        } catch (err1) {
+            const shouldRetryWithToken = this._isYouTubeBotBlockError(err1.message);
+            if (!shouldRetryWithToken || !provider) throw err1;
+            console.warn(`[ChannelWatcher] anonymous failed (${err1.message.slice(0, 80)}) — generating PO Token`);
+
+            // Stage 2: anonymous + PO Token
+            try {
+                const token = await provider.get();
+                if (!token) throw new Error('PO Token unavailable');
+                return await attemptFn({
+                    skipCookies: true,
+                    poToken: token.poToken,
+                    visitorData: token.visitorData
+                });
+            } catch (err2) {
+                // Stage 3: cookies (only if user has logged in)
+                if (!hasCookies) throw err2;
+                if (!this._isYouTubeAuthRequiredError(err2.message)
+                    && !this._isYouTubeBotBlockError(err2.message)) throw err2;
+                console.warn(`[ChannelWatcher] PO Token attempt failed (${err2.message.slice(0, 80)}) — retrying with cookies`);
+                return await attemptFn({ skipCookies: false });
+            }
+        }
+    }
+
+    // Lazily load PO Token provider to avoid the bgutils-js + jsdom import
+    // cost on machines that never hit a YouTube block
+    _getPOTokenProvider() {
+        if (this._poTokenProviderCached !== undefined) return this._poTokenProviderCached;
+        try {
+            const { getProvider } = require('./poTokenProvider');
+            this._poTokenProviderCached = getProvider();
+        } catch (e) {
+            console.warn('[ChannelWatcher] PO Token provider unavailable:', e.message);
+            this._poTokenProviderCached = null;
+        }
+        return this._poTokenProviderCached;
+    }
+
+    // YouTube blocks that PO Token COULD help bypass:
+    //   - "Sign in to confirm you're not a bot"
+    //   - "Requested format is not available" (server returned only storyboards)
+    //   - "No video formats found"
+    _isYouTubeBotBlockError(msg) {
+        const s = String(msg || '');
+        return this._isYouTubeAuthRequiredError(s)
+            || /Requested format is not available/i.test(s)
+            || /No video formats found/i.test(s)
+            || /Only images are available/i.test(s);
     }
 
     _downloadFullVideoCore(sourceUrl, folder, onProgress, opts) {
