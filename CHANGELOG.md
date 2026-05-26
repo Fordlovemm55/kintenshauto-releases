@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.0.24] — 2026-05-26
+
+### Fixed — Per-page post_times skipped same-day slots, piled clips on consecutive days at first slot
+- When a page had custom `post_times` like `["09:00","13:00","18:00","21:00"]`
+  and the user added clips one at a time (typical workflow), every new
+  clip was forced to "next-day midnight" as the scheduling baseline. The
+  scheduler then picked the first peak slot AFTER midnight — i.e. the
+  earliest time in the list — for every clip. Result: instead of filling
+  13:00/18:00/21:00 of the same day, clips piled up at 09:00 of day+1,
+  day+2, day+3… so a page's `post_times` was effectively reduced to one
+  slot per day.
+- The "fresh-day" baseline came from an older user request to keep batch
+  enqueues bundled on one calendar day. That intent was correct for
+  multi-clip batches but wrong for single-clip enqueues: the baseline
+  should only roll forward when same-day slots are exhausted.
+- Fix: drop the next-day-midnight forcing in `orchestrator.js` (and the
+  matching preview paths in `server.js`). Start from
+  `lastScheduled + cooldown` and let `nextPeakSlotAfter()` pick the next
+  available slot — which prefers the remaining same-day slots, then rolls
+  to the next day naturally once today is full.
+- Preview endpoints (`/api/pipeline/start` and
+  `/api/pipeline/preview-schedule`) now also pass the page's `post_times`
+  through to `planClipSchedule`, so the preview shown to the user matches
+  the schedule the orchestrator will actually create.
+
 ## [1.0.23] — 2026-05-19
 
 ### Fixed — YouTube login captured incomplete cookies, broke yt-dlp

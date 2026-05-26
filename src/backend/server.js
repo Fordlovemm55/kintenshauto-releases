@@ -2562,21 +2562,23 @@ app.post('/api/pipeline/start', asyncHandler(async (req, res) => {
               AND status IN ('pending', 'running', 'posted', 'processing', 'copyright_waiting')
               AND datetime(scheduled_at) > datetime('now', 'localtime', '-1 day')
         `).get(p.id);
-        // Match orchestrator policy: each new set starts on the day AFTER lastScheduled.
-        // (Keeps sets cleanly bundled per calendar day.)
+        // Match orchestrator policy: continue from lastScheduled + cooldown so
+        // remaining same-day slots get filled before rolling to the next day.
+        const pagePage = db.prepare('SELECT cooldown_min, post_times FROM pages WHERE id = ?').get(p.id);
+        const cooldownMin = pagePage?.cooldown_min || 30;
         let startFrom;
         if (lastRow?.t) {
             const ld = new Date(lastRow.t.replace(' ', 'T'));
-            const nextDay = new Date(ld.getFullYear(), ld.getMonth(), ld.getDate() + 1, 0, 0, 0, 0);
-            startFrom = new Date(Math.max(Date.now(), nextDay.getTime()));
+            startFrom = new Date(Math.max(Date.now(), ld.getTime() + cooldownMin * 60 * 1000));
         } else {
             startFrom = new Date();
         }
         // Plan for the number of clips this page will receive (1 video × clipsPerVideo,
         // or share across pages — simplified: assume 1 video per page here)
         const clipsThisPage = Math.max(1, clipsPerVideo);
-        const pagePage = db.prepare('SELECT cooldown_min FROM pages WHERE id = ?').get(p.id);
-        const plan = planClipSchedule(clipsThisPage, startFrom, pagePage?.cooldown_min || 30);
+        let customTimes;
+        try { if (pagePage?.post_times) customTimes = JSON.parse(pagePage.post_times); } catch {}
+        const plan = planClipSchedule(clipsThisPage, startFrom, cooldownMin, customTimes);
         return {
             page_id: p.id,
             page_name: p.name,
@@ -2623,7 +2625,7 @@ app.post('/api/pipeline/preview-schedule', asyncHandler(async (req, res) => {
 
     const placeholders = ids.map(() => '?').join(',');
     const pages = db.prepare(`
-        SELECT id, name, cooldown_min FROM pages WHERE id IN (${placeholders})
+        SELECT id, name, cooldown_min, post_times FROM pages WHERE id IN (${placeholders})
     `).all(...ids);
 
     const out = pages.map(p => {
@@ -2633,17 +2635,19 @@ app.post('/api/pipeline/preview-schedule', asyncHandler(async (req, res) => {
               AND status IN ('pending', 'running', 'posted', 'processing', 'copyright_waiting')
               AND datetime(scheduled_at) > datetime('now', 'localtime', '-1 day')
         `).get(p.id);
-        // Match orchestrator policy: each new set starts on the day AFTER lastScheduled.
-        // (Keeps sets cleanly bundled per calendar day.)
+        // Match orchestrator policy: continue from lastScheduled + cooldown so
+        // remaining same-day slots get filled before rolling to the next day.
+        const cooldownMin = p.cooldown_min || 30;
         let startFrom;
         if (lastRow?.t) {
             const ld = new Date(lastRow.t.replace(' ', 'T'));
-            const nextDay = new Date(ld.getFullYear(), ld.getMonth(), ld.getDate() + 1, 0, 0, 0, 0);
-            startFrom = new Date(Math.max(Date.now(), nextDay.getTime()));
+            startFrom = new Date(Math.max(Date.now(), ld.getTime() + cooldownMin * 60 * 1000));
         } else {
             startFrom = new Date();
         }
-        const plan = planClipSchedule(n, startFrom, p.cooldown_min || 30);
+        let customTimes;
+        try { if (p.post_times) customTimes = JSON.parse(p.post_times); } catch {}
+        const plan = planClipSchedule(n, startFrom, cooldownMin, customTimes);
         return {
             page_id: p.id,
             page_name: p.name,

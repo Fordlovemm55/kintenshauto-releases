@@ -767,24 +767,17 @@ class Orchestrator {
               AND datetime(scheduled_at) > datetime('now', 'localtime', '-1 day')
         `).get(targetPage.id);
 
-        // "Each new set gets a fresh day" policy (user request):
-        //   • First set ever (nothing scheduled) → start from now → fills today's remaining slots
-        //   • Additional sets → start at 00:00 of the day AFTER last scheduled clip.
-        //     nextPeakSlotAfter() will round up to 07:00 (first peak of that day).
-        // This keeps each queued set clearly bundled on one day instead of splitting
-        // across "last slot of today + first slots of tomorrow" which confused users.
+        // Continue from the last scheduled clip (+ cooldown) so nextPeakSlotAfter()
+        // fills any remaining same-day slots before rolling to the next day.
+        // Earlier code forced startFrom to next-day midnight, which made every
+        // single-clip enqueue jump to the next day's first slot instead of
+        // filling today's remaining post_times — defeating page-level schedules.
+        const cooldownMin = targetPage.cooldown_min || 30;
         let startFrom;
         if (lastScheduled?.t) {
             const lastDate = new Date(lastScheduled.t.replace(' ', 'T'));
-            // Midnight of the day AFTER lastScheduled (local)
-            const nextDayMidnight = new Date(
-                lastDate.getFullYear(),
-                lastDate.getMonth(),
-                lastDate.getDate() + 1,
-                0, 0, 0, 0
-            );
             // Guard against clock skew: never start before "now"
-            startFrom = new Date(Math.max(Date.now(), nextDayMidnight.getTime()));
+            startFrom = new Date(Math.max(Date.now(), lastDate.getTime() + cooldownMin * 60 * 1000));
         } else {
             startFrom = new Date();
         }
@@ -792,7 +785,6 @@ class Orchestrator {
         // Plan ALL clips across peak slots — first batch immediate, rest auto-spread.
         // page.post_times (JSON array of "HH:MM") overrides the global peak slots
         // when set. Empty / unset → falls back to PEAK_SLOTS in peakSchedule.js.
-        const cooldownMin = targetPage.cooldown_min || 30;
         let customTimes;
         try {
             if (targetPage.post_times) customTimes = JSON.parse(targetPage.post_times);
