@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.25] — 2026-06-02
+
+### Added — เฝ้าช่อง TikTok อัตโนมัติ (เหมือน YouTube)
+- ใส่ลิงก์ช่อง TikTok (`tiktok.com/@user`) หรือลิงก์ย่อ (`vt.tiktok.com/xxxx`)
+  → บอทล็อกช่อง → มีคลิปใหม่ดาวน์โหลดอัตโนมัติ ใช้การตั้งค่าชุดเดียวกับ YouTube
+- รองรับลิงก์คลิปเดี่ยว/โปรไฟล์/ลิงก์ย่อ — normalize เหลือ channel root ให้อัตโนมัติ
+- Baseline ด้วย `timestamp` (ไม่ใช่ลำดับในหน้า) → ภูมิคุ้มกัน pinned post ที่ลอย
+  ขึ้นบนสุด ทำให้ไม่พลาดคลิปใหม่และไม่ดูด history เก่า
+- ข้ามโพสต์รูปภาพ/สไลด์โชว์ (TikTok photo posts) ให้อัตโนมัติ — ดึงเฉพาะวิดีโอ
+
+### Fixed — คลิป TikTok ไม่มีลายน้ำ
+- format selector ตัดตัว `download` (ที่มีลายน้ำ TikTok logo + @username) ออก
+  → คลิปที่ได้สะอาด เอาไปโพสต์ Reel ได้เลย
+
 ## [1.0.24] — 2026-05-26
 
 ### Fixed — Per-page post_times skipped same-day slots, piled clips on consecutive days at first slot
