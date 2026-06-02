@@ -726,6 +726,24 @@ class ChannelWatcher extends EventEmitter {
         );
     }
 
+    /**
+     * เลือก yt-dlp format string ตาม platform
+     *   - TikTok: ตัด format_id 'download' (ตัวมีลายน้ำ TikTok logo + @username)
+     *     ออกจาก fallback ด้วย → 'bv*+ba/b[format_id!=download]'
+     *     • bv*+ba = best video-only + best audio (ไม่ใช่ตัว watermarked อยู่แล้ว)
+     *     • b[format_id!=download] = ถ้า TikTok คืนเฉพาะ muxed → เลือกตัวที่ "ไม่ใช่ download"
+     *       (play_addr สะอาด) แทนที่จะเผลอได้ตัว download_addr ที่มีลายน้ำ
+     *   - platform อื่น: 'bv*+ba/b' เดิม (ไม่กระทบ YouTube/FB/Bilibili)
+     * pure → unit-test ได้
+     */
+    _videoFormatSelector(sourceUrl) {
+        const platform = this._detectPlatform(sourceUrl);
+        if (platform === 'tiktok') {
+            return 'bv*+ba/b[format_id!=download]';
+        }
+        return 'bv*+ba/b';
+    }
+
     // Wraps an attempt fn with 3 retry layers — anonymous, PO Token, cookies.
     // Each layer only fires if the previous one hit a "YouTube wants more
     // proof" error (Sign in / Requested format / storyboard-only).
@@ -799,7 +817,8 @@ class ChannelWatcher extends EventEmitter {
                 // video+audio). The 'b' alias is more permissive than 'best'
                 // and is required when the mweb extractor returns combined-only
                 // formats (e.g. some Shorts where dash streams aren't exposed).
-                '-f', 'bv*+ba/b',
+                // TikTok: format selector ตัดตัว watermarked ('download') ออก — ดู _videoFormatSelector
+                '-f', this._videoFormatSelector(sourceUrl),
                 '--merge-output-format', 'mp4',
                 '-o', outTmpl,
                 '--print', 'after_move:filepath',

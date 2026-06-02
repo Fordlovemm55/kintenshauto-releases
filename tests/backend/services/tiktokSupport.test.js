@@ -87,6 +87,27 @@ describe('TikTok timestamp baseline in _pushItemsToPending + photo filter', () =
     });
 });
 
+describe('_videoFormatSelector — กันลายน้ำ TikTok', () => {
+    let w;
+    beforeEach(() => { ({ w } = makeWatcher()); });
+
+    it('TikTok URL → ตัด format_id=download (ตัวมีลายน้ำ) ออกจาก fallback', () => {
+        const sel = w._videoFormatSelector('https://www.tiktok.com/@x/video/123');
+        expect(sel).toBe('bv*+ba/b[format_id!=download]');
+        expect(sel).toContain('format_id!=download');
+    });
+
+    it('YouTube URL → ใช้ selector เดิม (ไม่กระทบ)', () => {
+        expect(w._videoFormatSelector('https://www.youtube.com/watch?v=abc')).toBe('bv*+ba/b');
+    });
+
+    it('Facebook/Bilibili/อื่น ๆ → ใช้ selector เดิม', () => {
+        expect(w._videoFormatSelector('https://www.facebook.com/watch/?v=1')).toBe('bv*+ba/b');
+        expect(w._videoFormatSelector('https://www.bilibili.com/video/BV1')).toBe('bv*+ba/b');
+        expect(w._videoFormatSelector('https://example.com/x')).toBe('bv*+ba/b');
+    });
+});
+
 describe('module exports still intact (regression)', () => {
     it('SUPPORTED_PLATFORMS includes youtube and tiktok', () => {
         const mod = require(path.join(REPO_ROOT, 'src/backend/services/channelWatcher.js'));
