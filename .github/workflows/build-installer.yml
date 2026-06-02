@@ -12,6 +12,11 @@ on:
         required: false
         default: 'false'
 
+# ต้องมี contents: write เพื่อให้ softprops/action-gh-release สร้าง release +
+# อัป asset ได้ (default GITHUB_TOKEN เป็น read-only → 403 Forbidden)
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build on ${{ matrix.os }}
@@ -19,7 +24,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        # Windows เท่านั้น — ผู้ใช้ทั้งหมดเป็น Windows และ auto-update ต้องการ
+        # latest.yml ของ Windows; build Mac/Linux พร้อมกันทำให้ latest.yml ชน
+        # + เปลือง CI (ถ้าต้องรองรับ OS อื่นค่อยเพิ่ม matrix + แยก channel yml)
+        os: [windows-latest]
 
     steps:
       - name: Checkout code
@@ -62,21 +70,20 @@ jobs:
         continue-on-error: true
 
       # Build installer สำหรับแต่ละ OS
+      # --publish=never: electron-builder แค่ build ไม่ publish เอง
+      # (ให้ softprops/action-gh-release step เดียวเป็นตัวอัป asset → ไม่ชนกัน
+      #  + ไม่ต้องส่ง GH_TOKEN เข้า build → กัน 403 ตอน electron-builder auto-publish)
       - name: Build Windows installer
         if: matrix.os == 'windows-latest'
-        run: npm run dist:win
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run dist:win -- --publish=never
 
       - name: Build macOS installer
         if: matrix.os == 'macos-latest'
-        run: npm run dist:mac
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run dist:mac -- --publish=never
 
       - name: Build Linux installer
         if: matrix.os == 'ubuntu-latest'
-        run: npm run dist:linux
+        run: npm run dist:linux -- --publish=never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
