@@ -31,6 +31,15 @@ jobs:
           node-version: '18'
           cache: 'npm'
 
+      # Python 3.11 (มี distutils ในตัว) — node-gyp@9 ที่ build better-sqlite3
+      # เรียก `from distutils.version import StrictVersion` ซึ่งถูกถอดออกใน
+      # Python 3.12 (PEP 632). runner image อัปเป็น 3.12 default ทำให้ build
+      # ที่เคยผ่านกลับ fail แม้โค้ดไม่เปลี่ยน → pin 3.11 แก้ที่ต้นเหตุ
+      - name: Setup Python 3.11 (for node-gyp / better-sqlite3)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       # Linux: ติดตั้ง libs ที่ electron-builder ต้องใช้
       - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-latest'
