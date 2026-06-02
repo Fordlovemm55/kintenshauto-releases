@@ -140,6 +140,7 @@ class ChannelWatcher extends EventEmitter {
                 enabled             INTEGER DEFAULT 1,
                 error_count         INTEGER DEFAULT 0,
                 last_error          TEXT,
+                last_seen_ts        INTEGER,
                 created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE IF NOT EXISTS watched_channel_pages (
@@ -185,6 +186,18 @@ class ChannelWatcher extends EventEmitter {
             addColIfMissing('orchestrator_run_id', 'TEXT');
         } catch (e) {
             console.warn('[ChannelWatcher] migration scan failed:', e.message);
+        }
+
+        // migration: last_seen_ts สำหรับ baseline แบบ timestamp (TikTok) — กัน pinned post
+        // ทำให้ตรวจคลิปใหม่พลาด (ดู _doCheckChannel). DB เก่าจะไม่มีคอลัมน์นี้ → เติมให้
+        try {
+            const wcCols = this.db.prepare(`PRAGMA table_info(watched_channels)`).all().map(c => c.name);
+            if (!wcCols.includes('last_seen_ts')) {
+                try { this.db.exec(`ALTER TABLE watched_channels ADD COLUMN last_seen_ts INTEGER`); }
+                catch (e) { console.warn('[ChannelWatcher] migration add last_seen_ts skipped:', e.message); }
+            }
+        } catch (e) {
+            console.warn('[ChannelWatcher] watched_channels migration scan failed:', e.message);
         }
 
         // ✅ CRITICAL MIGRATION: เปลี่ยน UNIQUE จาก source_url (global) → (watched_id, video_id) composite
@@ -357,6 +370,89 @@ class ChannelWatcher extends EventEmitter {
             if (decoded !== url) return decoded;
         } catch { /* malformed URI — ใช้ original */ }
         return url;
+    }
+
+    /**
+     * Pure helper: สกัด channel root จาก TikTok URL รูปแบบต่าง ๆ → https://www.tiktok.com/@handle
+     * รองรับ:
+     *   - โปรไฟล์เต็ม      https://www.tiktok.com/@user.name        → คงเดิม
+     *   - ลิงก์คลิป/รูป    https://www.tiktok.com/@user/video/123    → ตัดเหลือ @user
+     *                     https://www.tiktok.com/@user/photo/123    → ตัดเหลือ @user
+     * คืน null ถ้าหา @handle ไม่ได้ (เช่น redirect ไป homepage / ลิงก์ไม่ใช่ช่อง)
+     * NOTE: pure (ไม่มี network/side-effect) → unit-test ได้ตรง ๆ
+     */
+    _parseTikTokChannelUrl(url) {
+        if (!url) return null;
+        // @handle ของ TikTok: ตัวอักษร/ตัวเลข/จุด/ขีดล่าง (ความยาว 1-24 ตามกติกาจริง แต่เผื่อไว้)
+        const m = String(url).match(/tiktok\.com\/@([A-Za-z0-9._]+)/i);
+        if (!m) return null;
+        return `https://www.tiktok.com/@${m[1]}`;
+    }
+
+    /**
+     * Resolve + normalize TikTok URL ให้เป็น channel root ก่อนเก็บลง DB
+     *   - ลิงก์ย่อ vt./vm.tiktok.com → ยิง HEAD ตาม redirect แล้วสกัด @handle
+     *   - ลิงก์คลิป/โปรไฟล์ปกติ → ตัดเหลือ channel root (pure)
+     * ยิง network เฉพาะ host ลิงก์ย่อเท่านั้น → @handle ปกติไม่มีต้นทุน network
+     * throw error ภาษาไทยถ้า resolve ไม่ได้ (กันสร้าง channel เสีย)
+     */
+    async _normalizeTikTokUrl(url) {
+        const decoded = this._decodeUrl(url);
+        let host = '';
+        try { host = new URL(decoded).host.toLowerCase(); } catch { /* ไม่ใช่ URL เต็ม */ }
+
+        // ลิงก์ย่อ → ต้อง resolve redirect ก่อน
+        if (host === 'vt.tiktok.com' || host === 'vm.tiktok.com') {
+            const resolved = await this._resolveRedirect(decoded);
+            const channel = this._parseTikTokChannelUrl(resolved);
+            if (!channel) {
+                throw new Error('ลิงก์ย่อ TikTok นี้ไม่ชี้ไปยังช่อง (อาจเป็นลิงก์ตาย/ถูกบล็อกภูมิภาค) — กรุณาใช้ลิงก์โปรไฟล์ tiktok.com/@ชื่อช่อง');
+            }
+            return channel;
+        }
+
+        // ลิงก์ปกติ (โปรไฟล์/คลิป) → ตัดเหลือ channel root
+        const channel = this._parseTikTokChannelUrl(decoded);
+        if (!channel) {
+            throw new Error('ลิงก์ TikTok ไม่ถูกต้อง — ต้องเป็นลิงก์โปรไฟล์ เช่น https://www.tiktok.com/@ชื่อช่อง');
+        }
+        return channel;
+    }
+
+    /**
+     * ตาม HTTP redirect (3xx) ด้วย HEAD request จนได้ URL ปลายทาง (สูงสุด 5 hops, timeout 10s)
+     * คืน URL สุดท้าย (string). ใช้ Node https/http ตรง ๆ — ไม่ต้องโหลด body
+     */
+    _resolveRedirect(startUrl, maxHops = 5, timeoutMs = 10000) {
+        return new Promise((resolve, reject) => {
+            let current = startUrl;
+            let hops = 0;
+            const visit = (u) => {
+                let parsed;
+                try { parsed = new URL(u); } catch { return reject(new Error('URL ไม่ถูกต้อง: ' + u)); }
+                const mod = parsed.protocol === 'http:' ? require('http') : require('https');
+                const req = mod.request(u, {
+                    method: 'HEAD',
+                    timeout: timeoutMs,
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36' }
+                }, (res) => {
+                    const { statusCode, headers } = res;
+                    res.resume(); // ทิ้ง body
+                    if (statusCode >= 300 && statusCode < 400 && headers.location) {
+                        if (++hops > maxHops) return reject(new Error('redirect เกิน ' + maxHops + ' ครั้ง'));
+                        // location อาจเป็น relative → resolve กับ current
+                        current = new URL(headers.location, u).href;
+                        return visit(current);
+                    }
+                    // ไม่ redirect แล้ว → คืน URL ปัจจุบัน
+                    resolve(u);
+                });
+                req.on('timeout', () => { req.destroy(); reject(new Error('resolve ลิงก์ย่อ timeout')); });
+                req.on('error', (e) => reject(e));
+                req.end();
+            };
+            visit(current);
+        });
     }
 
     /**
@@ -630,6 +726,24 @@ class ChannelWatcher extends EventEmitter {
         );
     }
 
+    /**
+     * เลือก yt-dlp format string ตาม platform
+     *   - TikTok: ตัด format_id 'download' (ตัวมีลายน้ำ TikTok logo + @username)
+     *     ออกจาก fallback ด้วย → 'bv*+ba/b[format_id!=download]'
+     *     • bv*+ba = best video-only + best audio (ไม่ใช่ตัว watermarked อยู่แล้ว)
+     *     • b[format_id!=download] = ถ้า TikTok คืนเฉพาะ muxed → เลือกตัวที่ "ไม่ใช่ download"
+     *       (play_addr สะอาด) แทนที่จะเผลอได้ตัว download_addr ที่มีลายน้ำ
+     *   - platform อื่น: 'bv*+ba/b' เดิม (ไม่กระทบ YouTube/FB/Bilibili)
+     * pure → unit-test ได้
+     */
+    _videoFormatSelector(sourceUrl) {
+        const platform = this._detectPlatform(sourceUrl);
+        if (platform === 'tiktok') {
+            return 'bv*+ba/b[format_id!=download]';
+        }
+        return 'bv*+ba/b';
+    }
+
     // Wraps an attempt fn with 3 retry layers — anonymous, PO Token, cookies.
     // Each layer only fires if the previous one hit a "YouTube wants more
     // proof" error (Sign in / Requested format / storyboard-only).
@@ -703,7 +817,8 @@ class ChannelWatcher extends EventEmitter {
                 // video+audio). The 'b' alias is more permissive than 'best'
                 // and is required when the mweb extractor returns combined-only
                 // formats (e.g. some Shorts where dash streams aren't exposed).
-                '-f', 'bv*+ba/b',
+                // TikTok: format selector ตัดตัว watermarked ('download') ออก — ดู _videoFormatSelector
+                '-f', this._videoFormatSelector(sourceUrl),
                 '--merge-output-format', 'mp4',
                 '-o', outTmpl,
                 '--print', 'after_move:filepath',
@@ -817,6 +932,13 @@ class ChannelWatcher extends EventEmitter {
             throw new Error(`platform ไม่รองรับ: ${platform}`);
         }
 
+        // TikTok: normalize URL → channel root ก่อนเก็บ (resolve ลิงก์ย่อ vt./vm.,
+        // ตัดลิงก์คลิปเดียวให้เหลือช่อง). อาจ throw → surface เป็น add error ตามปกติ
+        let normalizedUrl = channel_url;
+        if (platform === 'tiktok') {
+            normalizedUrl = await this._normalizeTikTokUrl(channel_url);
+        }
+
         // insert channel ก่อน เพื่อให้มี id ไปสร้าง folder
         // (ใช้ _scheduleNext เพื่อ next_check_at เป็น local time consistent กับระบบ)
         const result = this.db.prepare(`
@@ -825,7 +947,7 @@ class ChannelWatcher extends EventEmitter {
                  interval_hours, min_duration_sec, max_duration_sec,
                  download_dir, next_check_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(label, platform, channel_url, content_type,
+        `).run(label, platform, normalizedUrl, content_type,
                 interval_hours, min_duration_sec, max_duration_sec,
                 '__placeholder__', this._scheduleNext(interval_hours));
 
@@ -848,12 +970,14 @@ class ChannelWatcher extends EventEmitter {
         // baseline: ดึง latest แล้วเก็บ id ล่าสุด ไม่เพิ่มเข้า pending
         // ถ้า pull_latest > 0 → ดึง N คลิปล่าสุดเข้า pending_approvals ทันที (ไม่ต้องรอ check tick)
         try {
-            const scopedUrl = this._buildScopedUrl(channel_url, platform, content_type);
+            const scopedUrl = this._buildScopedUrl(normalizedUrl, platform, content_type);
             const fetchCount = pull_latest > 0
                 ? Math.min(Math.max(pull_latest, BASELINE_FETCH_COUNT), 30)
                 : BASELINE_FETCH_COUNT;
             const items = await this._fetchChannelVideos(scopedUrl, fetchCount);
             const latestId = items[0]?.id || null;
+            // baseline timestamp = ใหม่สุดของ items (สำหรับ TikTok ใช้ตัดคลิปเก่าออกในรอบ check)
+            const latestTs = items.reduce((mx, it) => Math.max(mx, Number(it.timestamp || 0)), 0) || null;
 
             let pendingAdded = 0;
             if (pull_latest > 0 && items.length > 0) {
@@ -869,9 +993,9 @@ class ChannelWatcher extends EventEmitter {
 
             this.db.prepare(`
                 UPDATE watched_channels
-                SET last_seen_video_id = ?, last_checked_at = ?
+                SET last_seen_video_id = ?, last_seen_ts = ?, last_checked_at = ?
                 WHERE id = ?
-            `).run(latestId, toSqlLocal(new Date()), id);
+            `).run(latestId, latestTs, toSqlLocal(new Date()), id);
 
             this.emit('channel:added', {
                 id, label,
@@ -954,6 +1078,13 @@ class ChannelWatcher extends EventEmitter {
         const detectedNow = toSqlLocal(new Date());
         let added = 0, skipped = 0;
         for (const it of items) {
+            // TikTok photo/slideshow posts ใช้ path /photo/<id> (ไม่ใช่ /video/<id>)
+            // → yt-dlp ดาวน์โหลดเป็นวิดีโอไม่ได้ ("No video formats") → ข้ามตั้งแต่ตอน detect
+            // (กรองฟรีจาก metadata ที่มี ไม่ต้อง fetch เพิ่ม)
+            if (channel.platform === 'tiktok') {
+                const probe = it.webpage_url || it.url || '';
+                if (probe.includes('/photo/')) { skipped++; continue; }
+            }
             if (!this._isVideoMatch(it, channel.content_type, channel.min_duration_sec, channel.max_duration_sec)) {
                 skipped++;
                 continue;
@@ -967,9 +1098,13 @@ class ChannelWatcher extends EventEmitter {
                 } else if (channel.platform === 'bilibili') {
                     sourceUrl = `https://www.bilibili.com/video/${it.id}`;
                 } else if (channel.platform === 'tiktok') {
-                    const uploader = it.uploader_id || it.uploader || it.channel;
+                    // ⚠️ ใช้ uploader (=@handle จริง เช่น "tiktok") ก่อน uploader_id
+                    // (=ตัวเลข เช่น "107955" → ประกอบเป็น URL แล้ว 404)
+                    // หมายเหตุ: branch นี้แทบไม่ทำงาน เพราะ flat-playlist คืน webpage_url
+                    // เป็น absolute URL อยู่แล้ว — เก็บไว้กันพังถ้า extractor เปลี่ยนในอนาคต
+                    const uploader = it.uploader || it.channel || it.uploader_id;
                     if (uploader) {
-                        sourceUrl = `https://www.tiktok.com/@${uploader.replace(/^@/, '')}/video/${it.id}`;
+                        sourceUrl = `https://www.tiktok.com/@${String(uploader).replace(/^@/, '')}/video/${it.id}`;
                     } else {
                         skipped++;
                         continue;
@@ -1036,22 +1171,30 @@ class ChannelWatcher extends EventEmitter {
             // กัน case: ช่องลงคลิป >15 ตัวระหว่าง check intervals → ระบบพลาดคลิปใหม่
             // วิธี: ถ้า fetched batch ยังไม่เห็น baseline (last_seen_video_id) → expand 100
             //       ถ้ายังไม่เจอใน 100 → expand 300 → ถ้ายังไม่เจอ → ยอมแพ้ + warn (ช่อง reset history)
+            // TikTok ใช้ timestamp เป็น "ขอบเขตเก่า" (กัน pinned post ที่ลอยขึ้น index 0);
+            // platform อื่นใช้ last_seen_video_id แบบ positional เดิม
             const isAutoCheck = fetchCountOverride === null;
-            if (isAutoCheck && ch.last_seen_video_id && items.length >= initialCount) {
-                const baselineFound = items.some(it => it.id === ch.last_seen_video_id);
-                if (!baselineFound) {
+            const hasBaseline = ch.platform === 'tiktok' ? !!ch.last_seen_ts : !!ch.last_seen_video_id;
+            const boundaryFound = (batch) => {
+                if (ch.platform === 'tiktok') {
+                    const lastTs = Number(ch.last_seen_ts || 0);
+                    // เจอขอบเขต = มีคลิปที่ ts <= last_seen_ts (batch ครอบคลุมจุดที่เคยเห็นแล้ว)
+                    return batch.some(it => Number(it.timestamp || 0) <= lastTs);
+                }
+                return batch.some(it => it.id === ch.last_seen_video_id);
+            };
+            if (isAutoCheck && hasBaseline && items.length >= initialCount) {
+                if (!boundaryFound(items)) {
                     console.log(`[ChannelWatcher] ch#${id} (${ch.label}): baseline ไม่เจอใน ${initialCount} → expand 100`);
                     const expanded100 = await this._fetchChannelVideos(scopedUrl, 100);
                     if (expanded100.length > 0) {
                         items = expanded100;
-                        const stillNotFound = !expanded100.some(it => it.id === ch.last_seen_video_id);
-                        if (stillNotFound && expanded100.length >= 100) {
+                        if (!boundaryFound(expanded100) && expanded100.length >= 100) {
                             console.log(`[ChannelWatcher] ch#${id}: ยังไม่เจอ baseline ใน 100 → expand 300`);
                             const expanded300 = await this._fetchChannelVideos(scopedUrl, 300);
                             if (expanded300.length > 0) {
                                 items = expanded300;
-                                const stillNotFound2 = !expanded300.some(it => it.id === ch.last_seen_video_id);
-                                if (stillNotFound2) {
+                                if (!boundaryFound(expanded300)) {
                                     console.warn(`[ChannelWatcher] ch#${id}: baseline ไม่เจอแม้ใน 300 — ช่องอาจ reset history. Accept top 300 เป็นใหม่ทั้งหมด`);
                                 }
                             }
@@ -1060,29 +1203,43 @@ class ChannelWatcher extends EventEmitter {
                 }
             }
 
-            // yt-dlp คืนล่าสุดก่อน — เดินจากท้ายมาหัว เพื่อ insert ตามลำดับเวลาจริง
-            // เจอ last_seen_video_id เมื่อไหร่ → คลิปก่อนหน้านั้นถือว่า "เคยเห็น" หยุด
-            const newOnes = [];
-            for (const it of items) {
-                if (ch.last_seen_video_id && it.id === ch.last_seen_video_id) break;
-                newOnes.push(it);
+            // หา "คลิปใหม่":
+            //  - TikTok: กรองด้วย timestamp > last_seen_ts (ภูมิคุ้มกัน pinned post ที่ลอยขึ้น index 0)
+            //            ถ้า last_seen_ts ว่าง (ช่องเก่าก่อน migration) → ไม่ push, แค่ตั้ง baseline ใหม่
+            //            ถ้าคลิปไหน timestamp หาย → INSERT OR IGNORE + UNIQUE(watched_id,video_id) กันซ้ำให้เอง
+            //  - platform อื่น: positional break ที่ last_seen_video_id เหมือนเดิม
+            let newOnes = [];
+            if (ch.platform === 'tiktok') {
+                const lastTs = Number(ch.last_seen_ts || 0);
+                if (lastTs > 0) {
+                    newOnes = items.filter(it => Number(it.timestamp || 0) > lastTs);
+                }
+                // เรียงเก่า → ใหม่ ตอน insert (ตาม timestamp) — กัน schedule_at ผิดลำดับ
+                newOnes.sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+            } else {
+                // yt-dlp คืนล่าสุดก่อน — เจอ last_seen_video_id เมื่อไหร่ → คลิปก่อนหน้าถือว่า "เคยเห็น" หยุด
+                for (const it of items) {
+                    if (ch.last_seen_video_id && it.id === ch.last_seen_video_id) break;
+                    newOnes.push(it);
+                }
+                newOnes.reverse();  // ใหม่สุด→เก่า ⇒ เก่า→ใหม่ ตอน insert
             }
-            // newOnes เรียงจาก "ใหม่สุด → เก่า" → reverse ให้เป็น "เก่า → ใหม่" ตอน insert
-            newOnes.reverse();
 
             const { added, skipped } = this._pushItemsToPending(ch, newOnes);
 
-            // อัปเดต last_seen เป็น latest item ของรอบนี้ (id แรกใน items = ใหม่สุด)
+            // อัปเดต baseline: id แรก (positional) + max timestamp (สำหรับ TikTok)
             const newestId = items[0]?.id || ch.last_seen_video_id;
+            const maxTs = items.reduce((mx, it) => Math.max(mx, Number(it.timestamp || 0)), Number(ch.last_seen_ts || 0));
             this.db.prepare(`
                 UPDATE watched_channels
                 SET last_seen_video_id = ?,
+                    last_seen_ts = ?,
                     last_checked_at = ?,
                     next_check_at = ?,
                     error_count = 0,
                     last_error = NULL
                 WHERE id = ?
-            `).run(newestId, toSqlLocal(new Date()), this._scheduleNext(ch.interval_hours), id);
+            `).run(newestId, maxTs || null, toSqlLocal(new Date()), this._scheduleNext(ch.interval_hours), id);
 
             if (added > 0) {
                 this.emit('approvals:new', { channel_id: id, channel_label: ch.label, added });

@@ -24,7 +24,7 @@ const PLATFORM_LABEL = {
 };
 
 const CONTENT_TYPE_OPTIONS = [
-  { value: 'all',      label: 'ทุกคลิปทั่วไป (Videos)' },
+  { value: 'all',      label: 'ทุกคลิปทั่วไป (Videos / TikTok)' },
   { value: 'shorts',   label: 'Shorts (YouTube)' },
   { value: 'reels',    label: 'Reels (Facebook / Shorts ของ YouTube)' },
   { value: 'longform', label: 'คลิปยาว (>1 นาที)' },
@@ -511,6 +511,13 @@ function ChannelForm({ initial, pages, onSubmit, onCancel, submitting }) {
 
   const platform = detectPlatform(channelUrl);
   const isEdit = !!initial;
+  const isTikTok = platform === 'tiktok';
+
+  // TikTok ดึง "ทุกคลิป" เท่านั้น (ไม่มี Shorts/Reels/Live แยกแบบ YouTube)
+  // → บังคับ content_type = 'all' อัตโนมัติเมื่อ user ใส่ลิงก์ TikTok
+  useEffect(() => {
+    if (isTikTok && contentType !== 'all') setContentType('all');
+  }, [isTikTok, contentType]);
 
   const togglePage = (id) => {
     setPageIds(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
@@ -549,7 +556,7 @@ function ChannelForm({ initial, pages, onSubmit, onCancel, submitting }) {
       <div style={{ marginTop: 12 }}>
         <label>ลิงก์ช่อง <span style={{ color: 'var(--danger)' }}>*</span></label>
         <input type="url" value={channelUrl} onChange={e => setChannelUrl(e.target.value)}
-               placeholder="https://www.youtube.com/@channel หรือ https://www.tiktok.com/@user"
+               placeholder="https://www.youtube.com/@channel · https://www.tiktok.com/@user · https://vt.tiktok.com/xxxx"
                disabled={isEdit} />
         {channelUrl && (
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
@@ -562,13 +569,16 @@ function ChannelForm({ initial, pages, onSubmit, onCancel, submitting }) {
 
       <div style={{ marginTop: 12 }}>
         <label>ประเภทคลิปที่จะดึง <span style={{ color: 'var(--danger)' }}>*</span></label>
-        <select value={contentType} onChange={e => setContentType(e.target.value)}>
+        <select value={contentType} onChange={e => setContentType(e.target.value)}
+                disabled={isTikTok}>
           {CONTENT_TYPE_OPTIONS.map(o => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
         <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
-          เลือกประเภทเดียวเพื่อกันบอทดูดคลิปข้ามประเภท
+          {isTikTok
+            ? 'TikTok ดึงทุกคลิปวิดีโอของช่อง (ข้ามโพสต์รูปภาพ/สไลด์โชว์ให้อัตโนมัติ)'
+            : 'เลือกประเภทเดียวเพื่อกันบอทดูดคลิปข้ามประเภท'}
         </div>
       </div>
 
@@ -659,8 +669,13 @@ function AddChannelModal({ pages, onClose, onSaved, showToast }) {
   const handle = async (data) => {
     setSubmitting(true);
     try {
-      await api('/api/watcher/channels', { method: 'POST', body: JSON.stringify(data) });
+      const ch = await api('/api/watcher/channels', { method: 'POST', body: JSON.stringify(data) });
       onSaved();
+      // R7: addChannel สร้าง channel เสมอ แม้ baseline (ดึงคลิปครั้งแรก) ล้มเหลว
+      // → ถ้ามี error เตือนให้ user รู้ว่าช่องถูกเพิ่มแต่ยังดึงคลิปไม่ได้ (เช่น ลิงก์ผิด/ช่องส่วนตัว)
+      if (ch && ch.error_count > 0 && ch.last_error) {
+        showToast?.('เพิ่มช่องแล้ว แต่ดึงคลิปครั้งแรกไม่สำเร็จ', ch.last_error, 'warning');
+      }
     } catch (e) {
       showToast?.('เพิ่มไม่สำเร็จ', e.message, 'danger');
     } finally {
