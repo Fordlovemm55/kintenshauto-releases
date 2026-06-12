@@ -19,6 +19,16 @@
 - `poster.js` adds WebRTC leak-prevention flags (`--force-webrtc-ip-handling-policy=disable_non_proxied_udp`) and forces Bangkok timezone + Thai Accept-Language header per posting page.
 - Bulk Thai proxy paste panel added to the Profiles Manager overlay (`profiles-injection.js`): textarea, **กระจายใส่เฟส** (distribute) and **ทดสอบพร็อกซี่** (test) buttons, result summary with shortage and uncovered-account list, per-account **ตรวจ IP** leak-test button.
 
+### Added — Banner visual editor
+- The banner-preset modal now has a 9:16 drag canvas (`BannerPreviewCanvas`): drag a banner to position it, drag the gold corner to resize, a rotation slider per layer, opacity reflected live; the numeric X/Y/width fields stay in sync.
+- Existing presets are editable — an **✏️ แก้ไข** button re-opens the modal pre-filled and saves via `PUT /api/banner-presets/:id`.
+- New pure helper `src/lib/bannerGeometry.js` (`layerToBox`/`boxToLayer`) mirrors the ffmpeg overlay math so the preview matches output for un-rotated banners; unit-tested (9 tests).
+
+### Added — Local clips import (post your own clips)
+- New **"เพิ่มคลิปเอง"** screen (`LocalClipsView`): pick a folder of video files, select target pages, choose **distribute** (round-robin, 1 clip → 1 page) or **post every clip to every page**, and the bot queues each clip into the pages' peak slots.
+- New `localClips` service (`scanFolder`, `planAssignments`, `importToQueue`) + endpoints `POST /api/local-clips/scan` and `POST /api/local-clips/import`.
+- Clips post **as-is** (no slicing, no banner, no re-encode); captions follow each page's existing caption settings (falling back to the file name). No changes to `core/`.
+
 ## [1.0.25] — 2026-06-02
 
 ### Added — เฝ้าช่อง TikTok อัตโนมัติ (เหมือน YouTube)

@@ -1538,6 +1538,33 @@ app.delete('/api/banner-presets/:id', (req, res) => {
 });
 
 // ====================================================================
+// LOCAL CLIPS — import the operator's own video files into the queue
+// ====================================================================
+const localClips = require('./services/localClips');
+
+app.post('/api/local-clips/scan', asyncHandler(async (req, res) => {
+    const { folder } = req.body;
+    if (!folder) throw badRequest('เลือกโฟลเดอร์ก่อน');
+    const { files, error } = localClips.scanFolder(folder);
+    if (error) return res.json({ count: 0, files: [], error });
+    res.json({ count: files.length, files: files.map(f => ({ name: f.name, size: f.size })) });
+}));
+
+app.post('/api/local-clips/import', asyncHandler(async (req, res) => {
+    const { folder, page_ids, mode } = req.body;
+    if (!folder) throw badRequest('เลือกโฟลเดอร์ก่อน');
+    if (!Array.isArray(page_ids) || !page_ids.length) throw badRequest('เลือกเพจอย่างน้อย 1 เพจ');
+    const { files, error } = localClips.scanFolder(folder);
+    if (error) throw badRequest('อ่านโฟลเดอร์ไม่ได้: ' + error);
+    if (!files.length) throw badRequest('ไม่พบไฟล์วิดีโอในโฟลเดอร์นี้');
+    const assignments = localClips.planAssignments(
+        files, page_ids.map(Number), mode === 'all' ? 'all' : 'distribute'
+    );
+    const result = await localClips.importToQueue(db, captionService, assignments);
+    res.json(result);
+}));
+
+// ====================================================================
 // COMMENT TEMPLATES
 // ====================================================================
 app.get('/api/comment-templates', (req, res) => {
