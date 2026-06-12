@@ -65,4 +65,17 @@ function parse(text) {
   return { proxies, invalid };
 }
 
-module.exports = { parse };
+function distribute(proxies, accounts, { onlyMissing = true } = {}) {
+  const targets = (onlyMissing ? accounts.filter(a => !a.hasProxy) : accounts.slice())
+    .sort((x, y) => x.id - y.id);
+  const assignments = [];
+  const n = Math.min(targets.length, proxies.length);
+  for (let i = 0; i < n; i++) {
+    assignments.push({ accountId: targets[i].id, proxy: proxies[i] });
+  }
+  const uncovered = targets.slice(n).map(a => a.id);
+  const leftover = proxies.slice(n);
+  return { assignments, shortBy: uncovered.length, uncovered, leftover };
+}
+
+module.exports = { parse, distribute };
