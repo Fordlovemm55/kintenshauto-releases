@@ -18,6 +18,15 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 
 puppeteer.use(StealthPlugin());
 
+// Build the Chrome --proxy-server flag for a profile. Credentials are NEVER
+// put in the flag (Chrome ignores them there); they are applied later via
+// page.authenticate(). Returns null when the profile has no proxy.
+function proxyArgFor(profile) {
+    if (!profile || !profile.proxy_host || !profile.proxy_port) return null;
+    const scheme = profile.proxy_type || 'http';
+    return `--proxy-server=${scheme}://${profile.proxy_host}:${profile.proxy_port}`;
+}
+
 /**
  * Find Chrome binary on this machine (Windows)
  * Priority: settings override → env var → standard install paths
@@ -98,10 +107,8 @@ function launchPlainChromeForLogin(profile, { startUrl = 'https://www.facebook.c
         '--disable-notifications',
         '--deny-permission-prompts'
     ];
-    if (profile.proxy_host && profile.proxy_port) {
-        const proxy = (profile.proxy_type || 'http') + '://' + profile.proxy_host + ':' + profile.proxy_port;
-        args.push(`--proxy-server=${proxy}`);
-    }
+    const proxyArg = proxyArgFor(profile);
+    if (proxyArg) args.push(proxyArg);
     args.push(startUrl);
 
     const child = spawn(chromePath, args, {
@@ -221,10 +228,8 @@ async function launchForProfile(profile, { headless = false } = {}) {
         '--disable-notifications',
         '--deny-permission-prompts'
     ];
-    if (profile.proxy_host && profile.proxy_port) {
-        const proxy = (profile.proxy_type || 'http') + '://' + profile.proxy_host + ':' + profile.proxy_port;
-        args.push(`--proxy-server=${proxy}`);
-    }
+    const proxyArg = proxyArgFor(profile);
+    if (proxyArg) args.push(proxyArg);
     if (headless) args.push('--headless=new');
 
     const proc = spawn(chromePath, args, {
@@ -1030,7 +1035,7 @@ async function switchToPageViaProfileMenu(page, targetPageName, onLog, targetPag
             //   1. EXACT pageId in href path / data attribute (rename-proof)
             //   2. EXACT first-line text match (case-insensitive, normalized whitespace)
             //   3. ❌ NO loose/prefix matching — too many false positives when many
-            //      pages share a prefix like "ดู..." or "ซีรีย์..."
+            //      pages share a prefix like "ดู..." or "ซีรีส์..."
             let pidRow = null, exactRow = null;
             const visibleOptions = [];
             const checkedHrefs = [];
@@ -1551,10 +1556,22 @@ async function switchViaAccountCenter(page, targetPageName, onLog) {
  * @param {string}  opts.pageName  - display name used for in-UI verification + fallback
  * @param {Function} opts.onLog
  */
-async function postReel({ browser, videoPath, caption, coverPath, pageId, pageName, onLog }) {
+async function postReel({ browser, videoPath, caption, coverPath, pageId, pageName, profile, onLog }) {
     const page = await browser.newPage();
     // Set realistic viewport (most users)
     try { await page.setViewport({ width: 1366, height: 768 }); } catch {}
+
+    // Authed proxy support: Chrome can't take creds in --proxy-server, so feed
+    // them via CDP auth. decrypt() comes from captionService (same key as fb pw).
+    if (profile && profile.proxy_user) {
+        try {
+            const { decrypt } = require('../services/captionService');
+            const pass = profile.proxy_pass ? decrypt(profile.proxy_pass) : '';
+            await page.authenticate({ username: profile.proxy_user, password: pass });
+        } catch (e) {
+            console.error('[poster] proxy auth setup failed:', e.message);
+        }
+    }
 
     // ✅ FIX cross-profile composer state: auto-accept browser dialogs
     // (เดิม: composer ที่มี media ค้างจาก session ก่อน → puppeteer navigate away
@@ -2991,5 +3008,6 @@ module.exports = {
     humanType,
     fetchManagedPages,
     backupCookiesToDb,
-    restoreCookiesFromDb
+    restoreCookiesFromDb,
+    proxyArgFor,
 };
