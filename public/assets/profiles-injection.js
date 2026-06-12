@@ -453,11 +453,30 @@
         style: 'width:100%;font-family:monospace;font-size:13px',
         placeholder: '1.2.3.4:8080\n5.6.7.8:1080:user:pass' }),
       el('div', { style: 'margin-top:10px;display:flex;gap:8px' },
+        el('button', { class: 'btn-secondary', id: 'proxyTestBtn' }, 'ทดสอบพร็อกซี่'),
         el('button', { class: 'btn-primary', id: 'proxyDistributeBtn' }, 'กระจายใส่เฟส'),
       ),
       el('div', { id: 'proxyPoolResult', style: 'margin-top:12px;font-size:14px' }),
     );
     container.appendChild(box);
+
+    box.querySelector('#proxyTestBtn').addEventListener('click', async () => {
+      const text = box.querySelector('#proxyPoolText').value;
+      const out = box.querySelector('#proxyPoolResult');
+      out.textContent = 'กำลังทดสอบ...';
+      try {
+        const r = await fetch(API + '/api/proxies/test', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        }).then(x => x.json());
+        out.innerHTML = '';
+        r.results.forEach(t => {
+          const ok = t.alive && t.isThai;
+          out.appendChild(el('div', { style: `color:${ok ? '#2e7d32' : '#c62828'}` },
+            `${ok ? '✅' : '❌'} ${t.host}:${t.port} — ${t.alive ? (t.country || '?') : 'ตาย'}${t.alive && !t.isThai ? ' (ไม่ใช่ไทย)' : ''}`));
+        });
+      } catch (e) { out.textContent = 'ผิดพลาด: ' + e.message; }
+    });
 
     box.querySelector('#proxyDistributeBtn').addEventListener('click', async () => {
       const text = box.querySelector('#proxyPoolText').value;
@@ -603,6 +622,23 @@
       class: 'btn-ghost',
       onclick: () => onCloseBrowser(profile)
     }, '✕ ปิดโครม'));
+
+    // Per-account IP leak-test button: only shown for Facebook profiles that have
+    // a proxy assigned. Calls GET /api/proxies/leak-test/<accountId> and shows
+    // whether the browser will appear as a Thai IP to Facebook.
+    if (platform === 'facebook' && profile.proxy_host) {
+      const leakBtn = el('button', { class: 'btn-secondary', style: 'font-size:12px' }, 'ตรวจ IP');
+      leakBtn.addEventListener('click', async () => {
+        leakBtn.textContent = 'กำลังตรวจ...';
+        try {
+          const r = await fetch(API + '/api/proxies/leak-test/' + profile.id).then(x => x.json());
+          leakBtn.textContent = (r.ok && r.isThai && r.hidesVpn)
+            ? `🟢 ${r.browserCountry} (${r.browserIp})`
+            : `🔴 ${r.reason || r.browserCountry || 'รั่ว/ไม่ใช่ไทย'}`;
+        } catch (e) { leakBtn.textContent = '🔴 error'; }
+      });
+      actions.appendChild(leakBtn);
+    }
 
     actions.appendChild(el('button', {
       class: 'btn-danger',
