@@ -863,6 +863,62 @@ app.delete('/api/profiles/:id', (req, res) => {
     res.json({ ok: true });
 });
 
+// ====================================================================
+// PROXY POOL — bulk paste + distribute Thai proxies, 1 per account
+// ====================================================================
+const proxyPool = require('./services/proxyPool');
+
+// Preview what a pasted blob parses to (no DB writes).
+app.post('/api/proxies/parse-preview', asyncHandler(async (req, res) => {
+    const { text } = req.body;
+    const { proxies, invalid } = proxyPool.parse(text || '');
+    res.json({ count: proxies.length, proxies: proxies.map(p => ({
+        scheme: p.scheme, host: p.host, port: p.port, hasAuth: !!p.user,
+    })), invalid });
+}));
+
+// Persist one parsed proxy onto a profile row (encrypts the password).
+function _writeProxyToProfile(accountId, proxy) {
+    db.prepare(`
+        UPDATE profiles
+           SET proxy_type = ?, proxy_host = ?, proxy_port = ?, proxy_user = ?, proxy_pass = ?
+         WHERE id = ?
+    `).run(
+        proxy.scheme, proxy.host, proxy.port,
+        proxy.user || null,
+        proxy.pass ? encrypt(proxy.pass) : null,
+        accountId
+    );
+}
+
+app.post('/api/proxies/distribute', asyncHandler(async (req, res) => {
+    const { text, onlyMissing = true } = req.body;
+    const { proxies, invalid } = proxyPool.parse(text || '');
+
+    const rows = db.prepare(`SELECT id, proxy_host FROM profiles ORDER BY id`).all();
+    const accounts = rows.map(r => ({ id: r.id, hasProxy: !!r.proxy_host }));
+
+    const result = proxyPool.distribute(proxies, accounts, { onlyMissing });
+    for (const a of result.assignments) _writeProxyToProfile(a.accountId, a.proxy);
+
+    // Keep leftovers in the pool for future accounts.
+    const poolStmt = db.prepare(`
+        INSERT OR IGNORE INTO proxy_pool (scheme, host, port, proxy_user, proxy_pass)
+        VALUES (?, ?, ?, ?, ?)
+    `);
+    for (const p of result.leftover) {
+        poolStmt.run(p.scheme, p.host, p.port, p.user || null, p.pass ? encrypt(p.pass) : null);
+    }
+
+    res.json({
+        assigned: result.assignments.length,
+        shortBy: result.shortBy,
+        uncovered: result.uncovered,
+        leftover: result.leftover.length,
+        invalid,
+    });
+}));
+
 // Per-profile locks so duplicate clicks don't spawn duplicate Chromes / tabs
 const fetchPagesInFlight = new Map();   // profileId -> Promise
 
