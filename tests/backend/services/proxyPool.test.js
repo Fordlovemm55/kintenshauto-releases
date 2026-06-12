@@ -84,3 +84,28 @@ describe('proxyPool.distribute', () => {
     expect(new Set(used).size).toBe(used.length);
   });
 });
+
+const { testProxy } = require('../../../src/backend/services/proxyPool');
+
+describe('proxyPool.testProxy', () => {
+  const proxy = { scheme: 'http', host: '1.2.3.4', port: 8080, user: null, pass: null };
+
+  it('reports alive + Thai when geo lookup returns TH', async () => {
+    const httpGet = async () => ({ status: 'success', query: '203.0.1.2', country: 'Thailand', countryCode: 'TH' });
+    const r = await testProxy(proxy, { httpGet, now: () => 0 });
+    expect(r).toMatchObject({ alive: true, ip: '203.0.1.2', country: 'TH', isThai: true });
+  });
+
+  it('reports alive but not Thai when geo is elsewhere', async () => {
+    const httpGet = async () => ({ status: 'success', query: '8.8.8.8', country: 'United States', countryCode: 'US' });
+    const r = await testProxy(proxy, { httpGet, now: () => 0 });
+    expect(r).toMatchObject({ alive: true, isThai: false, country: 'US' });
+  });
+
+  it('reports dead when the request throws', async () => {
+    const httpGet = async () => { throw new Error('ECONNREFUSED'); };
+    const r = await testProxy(proxy, { httpGet, now: () => 0 });
+    expect(r.alive).toBe(false);
+    expect(r.error).toMatch(/ECONNREFUSED/);
+  });
+});

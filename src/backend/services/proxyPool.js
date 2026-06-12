@@ -78,4 +78,47 @@ function distribute(proxies, accounts, { onlyMissing = true } = {}) {
   return { assignments, shortBy: uncovered.length, uncovered, leftover };
 }
 
-module.exports = { parse, distribute };
+const http = require('http');
+
+function _makeAgent(proxy) {
+  const cred = proxy.user ? `${encodeURIComponent(proxy.user)}:${encodeURIComponent(proxy.pass || '')}@` : '';
+  const url = `${proxy.scheme}://${cred}${proxy.host}:${proxy.port}`;
+  if (proxy.scheme.startsWith('socks')) {
+    const { SocksProxyAgent } = require('socks-proxy-agent');
+    return new SocksProxyAgent(url);
+  }
+  const { HttpsProxyAgent } = require('https-proxy-agent');
+  return new HttpsProxyAgent(url);
+}
+
+// Default fetcher: GET a free geo endpoint THROUGH the proxy.
+function _defaultHttpGet(proxy, url, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const req = http.get(url, { agent: _makeAgent(proxy), timeout: timeoutMs }, (res) => {
+      let data = '';
+      res.on('data', c => (data += c));
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); } catch (e) { reject(new Error('bad geo response')); }
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', reject);
+  });
+}
+
+async function testProxy(proxy, { httpGet = _defaultHttpGet, timeoutMs = 8000, now = () => Date.now() } = {}) {
+  const start = now();
+  const GEO = 'http://ip-api.com/json/?fields=status,country,countryCode,query';
+  try {
+    const j = await httpGet(proxy, GEO, timeoutMs);
+    if (!j || j.status !== 'success') return { alive: false, error: 'geo lookup failed', latencyMs: now() - start };
+    return {
+      alive: true, ip: j.query, country: j.countryCode, countryName: j.country,
+      isThai: j.countryCode === 'TH', latencyMs: now() - start,
+    };
+  } catch (e) {
+    return { alive: false, error: e.message, latencyMs: now() - start };
+  }
+}
+
+module.exports = { parse, distribute, testProxy };
