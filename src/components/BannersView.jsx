@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { layerToBox, boxToLayer } from '../lib/bannerGeometry.js';
 
 const API = 'http://localhost:3003';
 
@@ -20,6 +21,7 @@ export default function BannersView({ showToast }) {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [editingPreset, setEditingPreset] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -102,7 +104,7 @@ export default function BannersView({ showToast }) {
       <div className="panel">
         <div className="panel-header">
           <div>
-            <div className="label-jp">旗 · BANNERS</div>
+            <div className="label-jp">แบนเนอร์</div>
             <div className="panel-title">รูปแบนเนอร์ที่อัปโหลด ({banners.length})</div>
             <div className="panel-subtitle">
               อัปโหลดรูป PNG / JPG ที่มีพื้นหลังโปร่งใส (ถ้าต้องการ) — ระบบจะนำไปวางทับคลิปตามชุดที่ตั้งไว้
@@ -119,6 +121,7 @@ export default function BannersView({ showToast }) {
 
         {banners.length === 0 ? (
           <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-muted)' }}>
+            <img className="empty-illustration" src="./assets/ui/empty-banners.png" alt="" />
             <div style={{ fontSize: 13 }}>ยังไม่มีรูปแบนเนอร์ — กด "＋ อัปโหลดรูป" เพื่อเริ่ม</div>
           </div>
         ) : (
@@ -135,7 +138,7 @@ export default function BannersView({ showToast }) {
       <div className="panel">
         <div className="panel-header">
           <div>
-            <div className="label-jp">構成 · PRESETS</div>
+            <div className="label-jp">ชุดแบนเนอร์</div>
             <div className="panel-title">ชุดแบนเนอร์ ({presets.length})</div>
             <div className="panel-subtitle">
               ชุดที่กำหนดว่ารูปไหนวางที่ตำแหน่งไหน — แต่ละเพจเลือกใช้ชุดเดียวกัน
@@ -162,6 +165,7 @@ export default function BannersView({ showToast }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {presets.map(p => (
               <PresetRow key={p.id} preset={p} banners={banners}
+                         onEdit={() => { setEditingPreset(p); setShowCreate(true); }}
                          onDelete={() => deletePreset(p.id)} />
             ))}
           </div>
@@ -171,8 +175,9 @@ export default function BannersView({ showToast }) {
       {showCreate && (
         <CreatePresetModal
           banners={banners}
-          onClose={() => setShowCreate(false)}
-          onSaved={async () => { setShowCreate(false); await refresh(); }}
+          editing={editingPreset}
+          onClose={() => { setShowCreate(false); setEditingPreset(null); }}
+          onSaved={async () => { setShowCreate(false); setEditingPreset(null); await refresh(); }}
           showToast={showToast}
         />
       )}
@@ -213,7 +218,7 @@ function BannerCard({ banner, onDelete }) {
   );
 }
 
-function PresetRow({ preset, banners, onDelete }) {
+function PresetRow({ preset, banners, onEdit, onDelete }) {
   const layers = preset.layers || [];
   const firstBanner = banners.find(b => b.id === layers[0]?.banner_id);
   return (
@@ -239,19 +244,107 @@ function PresetRow({ preset, banners, onDelete }) {
           </div>
         </div>
       </div>
-      <button className="btn-ghost" onClick={onDelete}
-              style={{ fontSize: 11, padding: '4px 10px', color: 'var(--danger)' }}>
-        🗑 ลบ
-      </button>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button className="btn-ghost" onClick={onEdit}
+                style={{ fontSize: 11, padding: '4px 10px' }}>✏️ แก้ไข</button>
+        <button className="btn-ghost" onClick={onDelete}
+                style={{ fontSize: 11, padding: '4px 10px', color: 'var(--danger)' }}>🗑 ลบ</button>
+      </div>
     </div>
   );
 }
 
-function CreatePresetModal({ banners, onClose, onSaved, showToast }) {
-  const [name, setName] = useState('');
-  const [layers, setLayers] = useState([
-    { banner_id: banners[0]?.id ?? null, position: { x: 50, y: 50 }, size: { width: 30 }, opacity: 100 }
-  ]);
+const FRAME_W = 270;
+const FRAME_H = 480;
+
+// 9:16 drag surface. Renders one box per layer; drag to move, drag the corner to resize.
+function BannerPreviewCanvas({ layers, banners, selectedIndex, onSelect, onLayerChange }) {
+  const drag = React.useRef(null);
+  const bannerById = (id) => banners.find(b => b.id === id);
+
+  const startDrag = (e, i, mode) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onSelect(i);
+    const layer = layers[i];
+    const banner = bannerById(layer.banner_id);
+    if (!banner) return;
+    const aspect = (banner.height_px || 1) / (banner.width_px || 1);
+    const startBox = layerToBox(layer, { w: FRAME_W, h: FRAME_H }, aspect);
+    drag.current = { mode, startX: e.clientX, startY: e.clientY, startBox, index: i, aspect };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  const onMove = (e) => {
+    const d = drag.current;
+    if (!d) return;
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
+    let box;
+    if (d.mode === 'move') {
+      box = { left: d.startBox.left + dx, top: d.startBox.top + dy, width: d.startBox.width };
+    } else {
+      box = { left: d.startBox.left, top: d.startBox.top, width: Math.max(13, d.startBox.width + dx) };
+    }
+    const patch = boxToLayer(box, { w: FRAME_W, h: FRAME_H }, d.aspect);
+    onLayerChange(d.index, { position: { x: patch.x, y: patch.y }, size: { width: patch.width } });
+  };
+
+  const onUp = () => {
+    drag.current = null;
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+  };
+
+  return (
+    <div onPointerDown={() => onSelect(-1)}
+         style={{
+           position: 'relative', width: FRAME_W, height: FRAME_H, flexShrink: 0,
+           background: '#101015', border: '1px solid var(--border-faint)', overflow: 'hidden',
+           touchAction: 'none',
+         }}>
+      <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'rgba(255,255,255,0.12)' }} />
+      <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.12)' }} />
+      {layers.map((layer, i) => {
+        const banner = bannerById(layer.banner_id);
+        if (!banner) return null;
+        const aspect = (banner.height_px || 1) / (banner.width_px || 1);
+        const box = layerToBox(layer, { w: FRAME_W, h: FRAME_H }, aspect);
+        const selected = i === selectedIndex;
+        const src = `file://${banner.file_path.replace(/\\/g, '/')}`;
+        return (
+          <div key={i} onPointerDown={(e) => startDrag(e, i, 'move')}
+               style={{
+                 position: 'absolute', left: box.left, top: box.top, width: box.width, height: box.height,
+                 transform: `rotate(${box.rotation}deg)`, transformOrigin: 'center',
+                 opacity: (layer.opacity ?? 100) / 100,
+                 outline: selected ? '2px solid var(--gold)' : '1px dashed rgba(255,255,255,0.45)',
+                 cursor: 'move', touchAction: 'none',
+               }}>
+            <img src={src} alt="" draggable={false}
+                 style={{ width: '100%', height: '100%', objectFit: 'fill', pointerEvents: 'none' }}
+                 onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
+            {selected && (
+              <div onPointerDown={(e) => startDrag(e, i, 'resize')}
+                   style={{ position: 'absolute', right: -6, bottom: -6, width: 12, height: 12,
+                            background: 'var(--gold)', borderRadius: '50%', cursor: 'nwse-resize' }} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CreatePresetModal({ banners, editing, onClose, onSaved, showToast }) {
+  const [name, setName] = useState(editing?.name ?? '');
+  const [layers, setLayers] = useState(
+    editing?.layers?.length
+      ? editing.layers.map(l => ({ ...l }))
+      : [{ banner_id: banners[0]?.id ?? null, position: { x: 50, y: 50 }, size: { width: 30 }, opacity: 100, rotation: 0 }]
+  );
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [saving, setSaving] = useState(false);
 
   const updateLayer = (i, patch) =>
@@ -276,14 +369,17 @@ function CreatePresetModal({ banners, onClose, onSaved, showToast }) {
     }
     setSaving(true);
     try {
-      const res = await fetch(`${API}/api/banner-presets`, {
-        method: 'POST',
+      const url = editing
+        ? `${API}/api/banner-presets/${editing.id}`
+        : `${API}/api/banner-presets`;
+      const res = await fetch(url, {
+        method: editing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), layers: valid })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      showToast?.('สร้างแล้ว', `ชุด "${name}" พร้อมใช้`, 'success');
+      showToast?.(editing ? 'บันทึกแล้ว' : 'สร้างแล้ว', `ชุด "${name}" พร้อมใช้`, 'success');
       onSaved?.();
     } catch (e) { showToast?.('สร้างไม่สำเร็จ', e.message, 'error'); }
     finally { setSaving(false); }
@@ -298,36 +394,50 @@ function CreatePresetModal({ banners, onClose, onSaved, showToast }) {
            style={{
              background: 'var(--surface-1)',
              border: '1px solid var(--gold)',
-             padding: 20, maxWidth: 700, width: '100%',
+             padding: 20, maxWidth: 860, width: '100%',
              maxHeight: '90vh', overflow: 'auto'
            }}>
         <div style={{ display: 'flex', justifyContent: 'space-between',
                       alignItems: 'center', marginBottom: 14 }}>
-          <div style={{ fontSize: 16, fontWeight: 500 }}>สร้างชุดแบนเนอร์ใหม่</div>
+          <div style={{ fontSize: 16, fontWeight: 500 }}>{editing ? 'แก้ไขชุดแบนเนอร์' : 'สร้างชุดแบนเนอร์ใหม่'}</div>
           <button className="btn-ghost" onClick={onClose}
                   style={{ fontSize: 14, padding: '2px 10px' }}>✕</button>
         </div>
 
         <label style={{ fontSize: 12, fontWeight: 500 }}>ชื่อชุด</label>
         <input type="text" value={name} onChange={e => setName(e.target.value)}
-               placeholder="เช่น แบนเนอร์ซีรีย์จีน"
+               placeholder="เช่น แบนเนอร์ซีรีส์จีน"
                style={{ width: '100%', fontSize: 13, padding: '6px 10px',
                         background: 'var(--surface-2)', border: '0.5px solid var(--border-faint)',
                         color: 'var(--text-primary)', marginTop: 4, marginBottom: 14 }} />
 
-        <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>
-          ชั้นแบนเนอร์ ({layers.length})
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+          <BannerPreviewCanvas
+            layers={layers}
+            banners={banners}
+            selectedIndex={selectedIndex}
+            onSelect={setSelectedIndex}
+            onLayerChange={(i, patch) => updateLayer(i, patch)}
+          />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>
+              ชั้นแบนเนอร์ ({layers.length}) — ลากในพรีวิวเพื่อจัดวาง
+            </div>
+            {layers.map((layer, i) => (
+              <div key={i} onClick={() => setSelectedIndex(i)}
+                   style={{ outline: i === selectedIndex ? '1px solid var(--gold)' : 'none' }}>
+                <LayerEditor index={i} layer={layer} banners={banners}
+                             onChange={patch => updateLayer(i, patch)}
+                             onRemove={() => { removeLayer(i); setSelectedIndex(0); }}
+                             canRemove={layers.length > 1} />
+              </div>
+            ))}
+            <button className="btn-ghost" onClick={addLayer}
+                    style={{ fontSize: 11, padding: '6px 14px', marginTop: 6 }}>
+              ＋ เพิ่มชั้น
+            </button>
+          </div>
         </div>
-        {layers.map((layer, i) => (
-          <LayerEditor key={i} index={i} layer={layer} banners={banners}
-                       onChange={patch => updateLayer(i, patch)}
-                       onRemove={() => removeLayer(i)}
-                       canRemove={layers.length > 1} />
-        ))}
-        <button className="btn-ghost" onClick={addLayer}
-                style={{ fontSize: 11, padding: '6px 14px', marginTop: 6 }}>
-          ＋ เพิ่มชั้น
-        </button>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end',
                       gap: 6, marginTop: 16 }}>
@@ -401,6 +511,13 @@ function LayerEditor({ index, layer, banners, onChange, onRemove, canRemove }) {
                   onChange={v => onChange({ size: { width: v } })} />
         <NumField label="ความทึบ (%)" value={layer.opacity ?? 100} min={0} max={100}
                   onChange={v => onChange({ opacity: v })} />
+      </div>
+
+      <div style={{ marginTop: 10 }}>
+        <label style={{ fontSize: 11 }}>หมุน ({layer.rotation ?? 0}°)</label>
+        <input type="range" min={-180} max={180} value={layer.rotation ?? 0}
+               onChange={e => onChange({ rotation: Number(e.target.value) })}
+               style={{ width: '100%' }} />
       </div>
     </div>
   );
