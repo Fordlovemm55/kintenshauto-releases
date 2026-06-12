@@ -106,11 +106,14 @@ function launchPlainChromeForLogin(profile, { startUrl = 'https://www.facebook.c
         '--disable-features=DestroyProfileOnBrowserClose,NotificationTriggers,PushMessaging',
         '--disable-notifications',
         '--deny-permission-prompts',
-        '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
-        '--webrtc-ip-handling-policy=disable_non_proxied_udp',
     ];
     const proxyArg = proxyArgFor(profile);
-    if (proxyArg) args.push(proxyArg);
+    if (proxyArg) {
+        // Prevent WebRTC from leaking the real local IP when routing through a proxy.
+        args.push('--force-webrtc-ip-handling-policy=disable_non_proxied_udp');
+        args.push('--webrtc-ip-handling-policy=disable_non_proxied_udp');
+        args.push(proxyArg);
+    }
     args.push(startUrl);
 
     const child = spawn(chromePath, args, {
@@ -229,11 +232,14 @@ async function launchForProfile(profile, { headless = false } = {}) {
         '--disable-infobars',
         '--disable-notifications',
         '--deny-permission-prompts',
-        '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
-        '--webrtc-ip-handling-policy=disable_non_proxied_udp',
     ];
     const proxyArg = proxyArgFor(profile);
-    if (proxyArg) args.push(proxyArg);
+    if (proxyArg) {
+        // Prevent WebRTC from leaking the real local IP when routing through a proxy.
+        args.push('--force-webrtc-ip-handling-policy=disable_non_proxied_udp');
+        args.push('--webrtc-ip-handling-policy=disable_non_proxied_udp');
+        args.push(proxyArg);
+    }
     if (headless) args.push('--headless=new');
 
     const proc = spawn(chromePath, args, {
@@ -1578,12 +1584,16 @@ async function postReel({ browser, videoPath, caption, coverPath, pageId, pageNa
     }
 
     // Make the Thai proxy convincing: a Bangkok timezone + Thai language so the
-    // browser locale doesn't contradict the Thai exit IP. Best-effort.
-    try {
-        await page.emulateTimezone('Asia/Bangkok');
-        await page.setExtraHTTPHeaders({ 'Accept-Language': 'th-TH,th;q=0.9,en;q=0.8' });
-    } catch (e) {
-        console.error('[poster] cloak setup failed:', e.message);
+    // browser locale doesn't contradict the Thai exit IP. Only apply when the
+    // profile actually uses a proxy — applying these to a proxy-less profile
+    // would create a fingerprint contradiction (Thai locale, non-Thai IP).
+    if (proxyArgFor(profile)) {
+        try {
+            await page.emulateTimezone('Asia/Bangkok');
+            await page.setExtraHTTPHeaders({ 'Accept-Language': 'th-TH,th;q=0.9,en;q=0.8' });
+        } catch (e) {
+            console.error('[poster] cloak setup failed:', e.message);
+        }
     }
 
     // ✅ FIX cross-profile composer state: auto-accept browser dialogs
