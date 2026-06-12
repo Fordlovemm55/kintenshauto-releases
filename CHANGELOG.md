@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased]
+
+### Added — Per-account Thai proxy pool
+- New `proxyPool` service (`src/backend/services/proxyPool.js`) with `parse()`, `distribute()`, and `testProxy()` functions.
+  - `parse()` accepts multi-line proxy text in host:port, host:port:user:pass, user:pass@host:port, and scheme://user:pass@host:port formats; deduplicates and reports invalid lines with reasons.
+  - `distribute()` assigns one proxy per account (only accounts missing a proxy by default), reports shortage count, uncovered account IDs, and leftover proxies.
+  - `testProxy()` verifies a proxy is alive and exits from Thailand via ip-api.com geo lookup; uses injected fetcher so tests need no real network.
+- New `proxy_pool` table in `schema.sql` stores leftover proxies (scheme, host, port, user, encrypted pass, status, tested_at).
+- Three new settings seeds: `proxy_default_scheme`, `proxy_test_on_distribute`, `proxy_assign_only_missing`.
+- Three additive health columns on `profiles`: `proxy_last_ip`, `proxy_last_country`, `proxy_checked_at`.
+- New REST endpoints in `server.js`:
+  - `POST /api/proxies/parse-preview` — parse-only preview (no DB writes).
+  - `POST /api/proxies/distribute` — assign parsed proxies 1:1 to accounts, encrypt passwords, store leftovers in `proxy_pool`. Optionally health-tests proxies before assigning and skips dead/non-Thai ones.
+  - `POST /api/proxies/test` — test a pasted list of proxies and return alive/Thai status per entry.
+  - `GET /api/proxies/leak-test/:id` — compare the machine's direct public IP against the proxy exit IP for a profile to confirm the proxy hides the VPN.
+- `poster.js` upgraded with `proxyArgFor()` helper (exported) that builds `--proxy-server=scheme://host:port` cleanly; `page.authenticate` wires proxy credentials via CDP so authed proxies work.
+- `poster.js` adds WebRTC leak-prevention flags (`--force-webrtc-ip-handling-policy=disable_non_proxied_udp`) and forces Bangkok timezone + Thai Accept-Language header per posting page.
+- Bulk Thai proxy paste panel added to the Profiles Manager overlay (`profiles-injection.js`): textarea, **กระจายใส่เฟส** (distribute) and **ทดสอบพร็อกซี่** (test) buttons, result summary with shortage and uncovered-account list, per-account **ตรวจ IP** leak-test button.
+
 ## [1.0.25] — 2026-06-02
 
 ### Added — เฝ้าช่อง TikTok อัตโนมัติ (เหมือน YouTube)
