@@ -203,6 +203,7 @@ module.exports = function createWorker(db, orchestrator, io, sessionMgr, dbPath)
             coverPath: coverToUse,
             pageId: job.fb_page_id,
             pageName: job.page_name,
+            profile,
             onLog: m => { log(m); io.emit('job:log', { jobId: job.id, msg: m }); }
         });
 
