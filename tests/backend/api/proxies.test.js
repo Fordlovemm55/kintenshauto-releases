@@ -51,3 +51,12 @@ describe('POST /api/proxies/distribute', () => {
     expect(withProxy).toHaveLength(1);
   });
 });
+
+describe('POST /api/proxies/test', () => {
+  it('returns per-proxy alive/Thai results', async () => {
+    const res = await request(app).post('/api/proxies/test')
+      .send({ text: '1.2.3.4:8080', _mock: { alive: true, country: 'TH', isThai: true, ip: '203.0.0.9' } });
+    expect(res.status).toBe(200);
+    expect(res.body.results[0]).toMatchObject({ host: '1.2.3.4', isThai: true });
+  });
+});

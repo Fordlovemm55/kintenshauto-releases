@@ -895,10 +895,19 @@ app.post('/api/proxies/distribute', asyncHandler(async (req, res) => {
     const { text, onlyMissing = true } = req.body;
     const { proxies, invalid } = proxyPool.parse(text || '');
 
+    // When test !== false, filter out dead/non-Thai proxies before distributing.
+    let pool = proxies;
+    let badProxies = [];
+    if (req.body.test !== false) {
+        const tested = await Promise.all(proxies.map(async p => ({ p, r: await proxyPool.testProxy(p) })));
+        pool = tested.filter(x => x.r.alive && x.r.isThai).map(x => x.p);
+        badProxies = tested.filter(x => !(x.r.alive && x.r.isThai)).map(x => ({ host: x.p.host, ...x.r }));
+    }
+
     const rows = db.prepare(`SELECT id, proxy_host FROM profiles ORDER BY id`).all();
     const accounts = rows.map(r => ({ id: r.id, hasProxy: !!r.proxy_host }));
 
-    const result = proxyPool.distribute(proxies, accounts, { onlyMissing });
+    const result = proxyPool.distribute(pool, accounts, { onlyMissing });
     for (const a of result.assignments) _writeProxyToProfile(a.accountId, a.proxy);
 
     // Keep leftovers in the pool for future accounts.
@@ -915,7 +924,54 @@ app.post('/api/proxies/distribute', asyncHandler(async (req, res) => {
         shortBy: result.shortBy,
         uncovered: result.uncovered,
         leftover: result.leftover.length,
+        badProxies: badProxies.length,
         invalid,
+    });
+}));
+
+const https = require('https');
+
+// Read this machine's REAL public IP directly (no proxy) — leak-test baseline.
+function _directPublicIp() {
+    return new Promise((resolve) => {
+        https.get('https://api.ipify.org?format=json', (res) => {
+            let d = ''; res.on('data', c => d += c);
+            res.on('end', () => { try { resolve(JSON.parse(d).ip); } catch { resolve(null); } });
+        }).on('error', () => resolve(null));
+    });
+}
+
+app.post('/api/proxies/test', asyncHandler(async (req, res) => {
+    const { text, _mock } = req.body;
+    const { proxies } = proxyPool.parse(text || '');
+    const results = [];
+    for (const p of proxies) {
+        // TEST-ONLY shortcut (only honored under the dev bypass) to avoid live network in CI.
+        const r = (_mock && process.env.KINTENSHAUTO_SKIP_AUTH === '1')
+            ? _mock
+            : await proxyPool.testProxy(p);
+        results.push({ host: p.host, port: p.port, ...r });
+    }
+    res.json({ results });
+}));
+
+// Prove FB will see a Thai IP for this profile, not the VPN/real IP.
+app.get('/api/proxies/leak-test/:id', asyncHandler(async (req, res) => {
+    const row = db.prepare(`SELECT proxy_type, proxy_host, proxy_port, proxy_user, proxy_pass FROM profiles WHERE id = ?`).get(req.params.id);
+    if (!row || !row.proxy_host) return res.json({ ok: false, reason: 'no_proxy' });
+    const proxy = {
+        scheme: row.proxy_type || 'http', host: row.proxy_host, port: row.proxy_port,
+        user: row.proxy_user || null, pass: row.proxy_pass ? decrypt(row.proxy_pass) : null,
+    };
+    const [vpnIp, t] = await Promise.all([_directPublicIp(), proxyPool.testProxy(proxy)]);
+    res.json({
+        ok: t.alive,
+        vpnIp,
+        browserIp: t.ip || null,
+        browserCountry: t.country || null,
+        isThai: !!t.isThai,
+        hidesVpn: !!(t.ip && vpnIp && t.ip !== vpnIp),
+        error: t.error || null,
     });
 }));
 
