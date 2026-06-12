@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS pages (
     avatar_url      TEXT,
     daily_quota     INTEGER DEFAULT 5,           -- คลิปต่อวัน default
     cooldown_min    INTEGER DEFAULT 30,          -- นาทีระหว่างโพสต์
-    niche           TEXT,                        -- เช่น "ซีรีย์จีน" ใช้กับ AI prompt
+    niche           TEXT,                        -- เช่น "ซีรีส์จีน" ใช้กับ AI prompt
     enabled         INTEGER DEFAULT 1,
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
     -- Plan 2 sync columns
@@ -351,6 +351,27 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
   ('cover_enabled',               '0'),
   -- Chrome path override (ว่างไว้ → ใช้ auto-detect ของ poster.js)
   ('chrome_executable_path',      '');
+
+-- ---------- PROXY POOL (leftover proxies kept for future accounts) ----------
+CREATE TABLE IF NOT EXISTS proxy_pool (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    scheme       TEXT DEFAULT 'http',
+    host         TEXT NOT NULL,
+    port         INTEGER NOT NULL,
+    proxy_user   TEXT,
+    proxy_pass   TEXT,                          -- encrypted
+    last_ip      TEXT,
+    last_country TEXT,
+    status       TEXT DEFAULT 'unused',         -- unused | assigned | dead
+    tested_at    DATETIME,
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(scheme, host, port, proxy_user)
+);
+
+INSERT OR IGNORE INTO settings (key, value) VALUES
+    ('proxy_default_scheme', 'http'),
+    ('proxy_test_on_distribute', '1'),
+    ('proxy_assign_only_missing', '1');
 
 -- =============================================================================
 -- 19. AUDIT QUEUE — buffer for cloud audit_log events when offline (Plan 2)

@@ -233,7 +233,10 @@ applyMigrations(db, [
     { table: 'ai_providers',      column: 'cloud_uuid', definition: 'TEXT' },
     { table: 'ai_providers',      column: 'cloud_synced_at', definition: 'DATETIME' },
     { table: 'ai_providers',      column: 'updated_at', definition: 'DATETIME' },
-    { table: 'ai_providers',      column: 'deleted_at', definition: 'DATETIME' }
+    { table: 'ai_providers',      column: 'deleted_at', definition: 'DATETIME' },
+    { table: 'profiles', column: 'proxy_last_ip', definition: 'TEXT' },
+    { table: 'profiles', column: 'proxy_last_country', definition: 'TEXT' },
+    { table: 'profiles', column: 'proxy_checked_at', definition: 'DATETIME' },
 ]);
 
 // Plan 2: post-migration steps that ALTER TABLE ADD COLUMN cannot do directly.
