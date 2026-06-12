@@ -440,6 +440,9 @@ try {
 //  แล้ว 2 worker หยิบ job เดียวกันได้)
 const workerState = { paused: false, pausedUntil: null };
 let _workerTickInFlight = false;
+// Guard background schedulers under tests (VITEST) so vitest's event loop can
+// exit cleanly — these timers would otherwise keep the process alive after tests.
+if (!process.env.VITEST) {
 setInterval(() => {
     if (workerState.paused) {
         if (workerState.pausedUntil && Date.now() >= workerState.pausedUntil) {
@@ -466,6 +469,7 @@ setInterval(async () => {
         await pushPending(db, session.access_token);
     } catch (e) { console.error('[sync] periodic push:', e.message); }
 }, 5 * 60 * 1000);
+}
 
 // ------------- Helpers -------------
 const asyncHandler = (fn) => (req, res, next) => {
@@ -712,6 +716,16 @@ app.post('/api/auth/logout', asyncHandler(async (req, res) => {
 }));
 
 app.get('/api/auth/status', (req, res) => {
+    // DEV ONLY: KINTENSHAUTO_SKIP_AUTH=1 bypasses Supabase login for local
+    // development so the UI skips the LoginScreen. Never set in a packaged build.
+    if (process.env.KINTENSHAUTO_SKIP_AUTH === '1') {
+        return res.json({
+            logged_in: true,
+            user: { id: 'dev-local', email: 'dev@local' },
+            expires_at: null,
+            dev_bypass: true
+        });
+    }
     const session = authService.getStoredSession();
     if (!session) return res.json({ logged_in: false });
     res.json({
@@ -750,6 +764,13 @@ app.use((req, res, next) => {
     if (req.path === '/api/health'
         || req.path.startsWith('/api/auth/')
         || req.path.startsWith('/api/version/')) {
+        return next();
+    }
+    // DEV ONLY: KINTENSHAUTO_SKIP_AUTH=1 lets the local API work without a
+    // Supabase session (paired with the /api/auth/status bypass above).
+    if (process.env.KINTENSHAUTO_SKIP_AUTH === '1') {
+        req.user = { id: 'dev-local', email: 'dev@local' };
+        req.accessToken = null;
         return next();
     }
     const session = authService.getStoredSession();
@@ -1489,7 +1510,7 @@ app.post('/api/ai/providers/:id/test', asyncHandler(async (req, res) => {
     });
     const sample = await provider.generateCaption({
         systemPrompt: 'คุณเป็นผู้เขียนแคปชั่น Facebook Reel ภาษาไทยที่สั้นและกระชับ',
-        userPrompt: 'เขียนแคปชั่น 1 บรรทัดโฆษณาคลิป "ซีรีย์จีน EP.1" (ยาว 60 วิ)',
+        userPrompt: 'เขียนแคปชั่น 1 บรรทัดโฆษณาคลิป "ซีรีส์จีน EP.1" (ยาว 60 วิ)',
         maxTokens: 100,
         temperature: 0.7
     });
@@ -1574,7 +1595,7 @@ app.post('/api/ai/keys/:provider/test', asyncHandler(async (req, res) => {
     });
     const sample = await provider.generateCaption({
         systemPrompt: 'คุณเป็นผู้เขียนแคปชั่น Facebook Reel ภาษาไทยที่สั้นและกระชับ',
-        userPrompt: 'เขียนแคปชั่น 1 บรรทัดโฆษณาคลิป "ซีรีย์จีน EP.1"',
+        userPrompt: 'เขียนแคปชั่น 1 บรรทัดโฆษณาคลิป "ซีรีส์จีน EP.1"',
         maxTokens: 80,
         temperature: 0.7
     });
@@ -2040,7 +2061,7 @@ app.post('/api/caption-prompts/test', asyncHandler(async (req, res) => {
     // Merge user-supplied variables with sensible defaults
     const defaults = {
         video_title: 'หงส์เหิรฟ้า EP.1',
-        niche: 'ซีรีย์จีนย้อนยุค',
+        niche: 'ซีรีส์จีนย้อนยุค',
         clip_number: '1',
         total_clips: '4',
         page_name: 'เพจทดสอบ',
@@ -3120,6 +3141,7 @@ function cleanupOrphanFiles() {
 
 // Schedule: DB backup every 6 hrs, orphan cleanup every 24 hrs.
 // First run happens 5 minutes after startup so Electron has time to stabilize.
+if (!process.env.VITEST) {
 setTimeout(() => {
     backupDatabase();
     setInterval(backupDatabase, 6 * 60 * 60 * 1000);
@@ -3129,6 +3151,7 @@ setTimeout(() => {
     cleanupOrphanFiles();
     setInterval(cleanupOrphanFiles, 24 * 60 * 60 * 1000);
 }, 10 * 60 * 1000);
+}
 
 process.on('SIGTERM', () => { server.close(() => process.exit(0)); });
 process.on('SIGINT', () => { server.close(() => process.exit(0)); });
@@ -3385,7 +3408,7 @@ process.on('unhandledRejection', (err) => console.error('[unhandled]', err));
         channelWatcher.on('approval:needs_youtube_login', (d) => io.emit('watcher:needs_youtube_login', d));
         channelWatcher.on('download:progress',      (d) => io.emit('watcher:download_progress', d));
 
-        channelWatcher.start();
+        if (!process.env.VITEST) channelWatcher.start();   // cron leaks the event loop under tests
 
         // graceful shutdown
         const _origSigterm = process.listeners('SIGTERM').slice();
