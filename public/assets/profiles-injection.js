@@ -3,9 +3,9 @@
  *
  * วิธีทำงาน:
  *  - ไม่แตะ React bundle ของหลัก
- *  - ดูเมนู "จัดการเฟส" ที่ React render ไว้ → bind click → show overlay ทับ .app-main
+ *  - ดูเมนู "จัดการบัญชี" ที่ React render ไว้ → bind click → show overlay ทับ .app-main
  *  - คลิกเมนู React อื่นๆ → ซ่อน overlay
- *  - 3 Tab: Facebook (เดิม) / X (Twitter) / Instagram — Chrome user-data-dir แยกชัดเจน
+ *  - 3 Tab: เฟซบุ๊ก (เดิม) / เอกซ์ (ทวิตเตอร์) / อินสตาแกรม — Chrome user-data-dir แยกชัดเจน
  *  - ใช้ CSS class เดิมของระบบ (.panel, .btn-primary, .badge ฯลฯ)
  */
 (function () {
@@ -16,11 +16,11 @@
     window.__KINTENSHAUTO_API__
   )) || 'http://localhost:3003';
 
-  const NAV_TH = 'จัดการเฟส';   // React nav text — ใช้จับเมนูนี้
+  const NAV_TH = 'จัดการบัญชี';   // React nav text — ใช้จับเมนูนี้
   const TABS = [
-    { key: 'facebook',  label: 'Facebook',     jp: '盟友',     icon: '◈' },
-    { key: 'x',         label: 'X (Twitter)',  jp: '鳥之消息', icon: '✕' },
-    { key: 'instagram', label: 'Instagram',    jp: '映像',     icon: '◉' }
+    { key: 'facebook',  label: 'เฟซบุ๊ก',          icon: '◈' },
+    { key: 'x',         label: 'เอกซ์ (ทวิตเตอร์)', icon: '✕' },
+    { key: 'instagram', label: 'อินสตาแกรม',       icon: '◉' }
   ];
 
   let overlay = null;
@@ -258,12 +258,12 @@
         text-align: center;
         color: var(--text-muted);
       }
-      #profiles-overlay .empty-state .kanji {
-        font-family: 'Noto Serif JP', serif;
-        font-size: 42px;
+      #profiles-overlay .empty-state .empty-illustration {
+        width: 96px;
+        height: 96px;
+        object-fit: contain;
         opacity: 0.5;
         margin-bottom: 10px;
-        letter-spacing: 4px;
       }
       #profiles-overlay .empty-state .text { font-size: 14px; margin-bottom: 4px; }
       #profiles-overlay .empty-state .sub { font-size: 11px; }
@@ -307,7 +307,7 @@
     overlay.id = 'profiles-overlay';
     overlay.style.cssText =
       'position:fixed;z-index:100;' +
-      'background:var(--sumi-ink, #0a0a0d);' +
+      'background:linear-gradient(160deg,#fbeaf6 0%,#f3e6fb 45%,#ece2fb 100%);' +
       'overflow-y:auto;padding:28px 36px;display:none;' +
       'box-shadow:inset 0 0 60px rgba(0,0,0,.5)';
     document.body.appendChild(overlay);
@@ -417,10 +417,10 @@
     // Header
     const header = el('div', { class: 'panel-header', style: 'margin-bottom:18px;border-bottom:1px solid var(--border-soft);padding-bottom:14px' },
       el('div', null,
-        el('div', { class: 'label-jp' }, '盟友 · MANAGE ACCOUNTS'),
-        el('div', { class: 'panel-title' }, 'จัดการเฟส / บัญชี'),
+        el('div', { class: 'label-jp' }, 'บัญชี'),
+        el('div', { class: 'panel-title' }, 'จัดการบัญชี'),
         el('div', { class: 'panel-subtitle' },
-          'จัดการบัญชี Facebook · X (Twitter) · Instagram — แต่ละบัญชีใช้ Chrome profile แยกกันเด็ดขาด')
+          'จัดการบัญชีเฟซบุ๊ก · เอกซ์ (ทวิตเตอร์) · อินสตาแกรม — แต่ละบัญชีใช้โปรไฟล์โครมแยกกันเด็ดขาด')
       )
     );
     overlay.appendChild(header);
@@ -433,8 +433,7 @@
         onclick: () => { activeTab = t.key; renderRoot(); }
       },
         el('span', { class: 'tab-icon' }, t.icon),
-        el('span', null, t.label),
-        el('span', { class: 'tab-jp' }, t.jp)
+        el('span', null, t.label)
       );
       tabBar.appendChild(tabEl);
     }
@@ -444,6 +443,49 @@
     overlay.appendChild(renderTabContent());
   }
 
+  // --- Bulk Thai proxy pool panel -------------------------------------------
+  function renderProxyPoolPanel(container) {
+    const box = el('div', { class: 'panel', style: 'margin:14px 0;padding:14px' },
+      el('h3', {}, 'พร็อกซี่ไทย (วางทีละหลายตัว)'),
+      el('p', { style: 'font-size:12px;color:#9a7fb3' },
+        'วางพร็อกซี่บรรทัดละ 1 ตัว — host:port หรือ host:port:user:pass หรือ user:pass@host:port'),
+      el('textarea', { id: 'proxyPoolText', rows: '8',
+        style: 'width:100%;font-family:monospace;font-size:13px',
+        placeholder: '1.2.3.4:8080\n5.6.7.8:1080:user:pass' }),
+      el('div', { style: 'margin-top:10px;display:flex;gap:8px' },
+        el('button', { class: 'btn-primary', id: 'proxyDistributeBtn' }, 'กระจายใส่เฟส'),
+      ),
+      el('div', { id: 'proxyPoolResult', style: 'margin-top:12px;font-size:14px' }),
+    );
+    container.appendChild(box);
+
+    box.querySelector('#proxyDistributeBtn').addEventListener('click', async () => {
+      const text = box.querySelector('#proxyPoolText').value;
+      const out = box.querySelector('#proxyPoolResult');
+      out.textContent = 'กำลังกระจาย...';
+      try {
+        const r = await fetch(API + '/api/proxies/distribute', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, onlyMissing: true }),
+        }).then(x => x.json());
+        const parts = [
+          `ใส่ครบ ${r.assigned} เฟส`,
+          r.shortBy ? `ขาดอีก ${r.shortBy} พร็อกซี่` : null,
+          r.leftover ? `เหลือไม่ได้ใช้ ${r.leftover}` : null,
+          (r.invalid && r.invalid.length) ? `บรรทัดผิดรูปแบบ ${r.invalid.length}` : null,
+        ].filter(Boolean);
+        out.innerHTML = '';
+        out.appendChild(el('div', { style: 'color:#2e7d32;font-weight:600' }, '✅ ' + parts.join(' · ')));
+        if (r.uncovered && r.uncovered.length) {
+          out.appendChild(el('div', { style: 'color:#c62828;margin-top:6px' },
+            'เฟสที่ยังไม่มีพร็อกซี่ (id): ' + r.uncovered.join(', ')));
+        }
+      } catch (e) {
+        out.textContent = 'ผิดพลาด: ' + e.message;
+      }
+    });
+  }
+
   function renderTabContent() {
     const platformProfiles = state.profiles.filter(p => (p.platform || 'facebook') === activeTab);
     const container = el('div', null);
@@ -451,11 +493,11 @@
     // Platform-specific help
     const help = el('div', { class: 'platform-help' });
     if (activeTab === 'facebook') {
-      help.innerHTML = '<b>Facebook</b> — ใช้สำหรับโพสต์ Reels อัตโนมัติบนเพจที่ผูกไว้ · กรอกอีเมล/รหัสผ่านเฟส · login ผ่าน Chrome แล้ว <i>Fetch Pages</i> เพื่อดึงรายชื่อเพจมาผูกอัตโนมัติ';
+      help.innerHTML = '<b>เฟซบุ๊ก</b> — ใช้สำหรับโพสต์รีลส์อัตโนมัติบนเพจที่ผูกไว้ · กรอกอีเมล/รหัสผ่านเฟซบุ๊ก · เข้าสู่ระบบผ่านโครมแล้วกด <i>ดึงรายชื่อเพจ</i> เพื่อดึงรายชื่อเพจมาผูกอัตโนมัติ';
     } else if (activeTab === 'x') {
-      help.innerHTML = '<b>X (Twitter)</b> — ใช้สำหรับ <i>ตามช่อง</i> ดึงคลิปจาก profile อื่น · ต้อง login บัญชี X จริง (throwaway ใช้ได้) เพราะ X บล็อก unauthenticated viewing · Chrome user-data-dir แยกจาก Facebook 100%';
+      help.innerHTML = '<b>เอกซ์ (ทวิตเตอร์)</b> — ใช้สำหรับ <i>ตามช่อง</i> ดึงคลิปจากโปรไฟล์อื่น · ต้องเข้าสู่ระบบด้วยบัญชีเอกซ์จริง (จะใช้บัญชีสำรองก็ได้) เพราะเอกซ์บล็อกการดูแบบไม่เข้าสู่ระบบ · โฟลเดอร์ข้อมูลผู้ใช้ของโครมแยกจากเฟซบุ๊กโดยสิ้นเชิง';
     } else if (activeTab === 'instagram') {
-      help.innerHTML = '<b>Instagram</b> — ใช้สำหรับ <i>ตามช่อง</i> ดึงคลิป Reels จาก profile อื่น · ต้อง login บัญชี IG จริง · Chrome user-data-dir แยกจาก FB/X เพื่อกัน cookies ปนกัน';
+      help.innerHTML = '<b>อินสตาแกรม</b> — ใช้สำหรับ <i>ตามช่อง</i> ดึงคลิปรีลส์จากโปรไฟล์อื่น · ต้องเข้าสู่ระบบด้วยบัญชีอินสตาแกรมจริง · โฟลเดอร์ข้อมูลผู้ใช้ของโครมแยกจากเฟซบุ๊ก/เอกซ์ เพื่อกันคุกกี้ปนกัน';
     }
     container.appendChild(help);
 
@@ -464,21 +506,27 @@
       class: 'btn-primary',
       style: 'margin-bottom:16px',
       onclick: () => openAddModal(activeTab)
-    }, '＋ เพิ่มบัญชี ' + TABS.find(t => t.key === activeTab).label);
+    }, '+ เพิ่มบัญชี ' + TABS.find(t => t.key === activeTab).label);
     container.appendChild(addBtn);
 
     // Profile list
     if (platformProfiles.length === 0) {
       container.appendChild(el('div', { class: 'empty-state' },
-        el('div', { class: 'kanji' }, '空'),
+        el('img', { class: 'empty-illustration', src: './assets/ui/empty-generic.png', alt: '' }),
         el('div', { class: 'text' }, 'ยังไม่มีบัญชีในกลุ่มนี้'),
-        el('div', { class: 'sub' }, 'กดปุ่ม "＋ เพิ่มบัญชี" ด้านบนเพื่อเริ่ม')
+        el('div', { class: 'sub' }, 'กดปุ่ม "+ เพิ่มบัญชี" ด้านบนเพื่อเริ่ม')
       ));
     } else {
       for (const p of platformProfiles) {
         container.appendChild(renderProfileCard(p));
       }
     }
+
+    // Bulk proxy panel — Facebook tab only (Thai proxies are used for FB posting)
+    if (activeTab === 'facebook') {
+      renderProxyPoolPanel(container);
+    }
+
     return container;
   }
 
@@ -496,9 +544,9 @@
         ),
         el('div', { class: 'pc-meta' },
           platform === 'facebook'
-            ? ('FB: ' + (profile.fb_username || '-'))
-            : ('Handle: ' + (profile.account_handle || '-')),
-          profile.last_login_at ? ' · login ล่าสุด: ' + profile.last_login_at.replace('T', ' ').slice(0, 16) : ' · ยังไม่เคย login'
+            ? ('เฟซบุ๊ก: ' + (profile.fb_username || '-'))
+            : ('บัญชี: ' + (profile.account_handle || '-')),
+          profile.last_login_at ? ' · เข้าสู่ระบบล่าสุด: ' + profile.last_login_at.replace('T', ' ').slice(0, 16) : ' · ยังไม่เคยเข้าสู่ระบบ'
         )
       )
     );
@@ -527,22 +575,22 @@
       actions.appendChild(el('button', {
         class: 'btn-primary',
         onclick: () => onAutoLogin(profile)
-      }, '⚡ Auto-login'));
+      }, '⚡ เข้าสู่ระบบอัตโนมัติ'));
       actions.appendChild(el('button', {
         class: 'btn-ghost',
         onclick: () => onLoginChrome(profile)
-      }, '🌐 เปิด Chrome'));
+      }, '🌐 เปิดโครม'));
     } else {
       actions.appendChild(el('button', {
         class: 'btn-primary',
         onclick: () => onLoginChrome(profile)
-      }, '🌐 เปิด Chrome login'));
+      }, '🌐 เปิดโครมเพื่อเข้าสู่ระบบ'));
     }
 
     actions.appendChild(el('button', {
       class: 'btn-ghost',
       onclick: () => onSyncCookies(profile)
-    }, '🔄 Sync cookies'));
+    }, '🔄 ซิงก์คุกกี้'));
 
     if (platform === 'facebook') {
       actions.appendChild(el('button', {
@@ -554,7 +602,7 @@
     actions.appendChild(el('button', {
       class: 'btn-ghost',
       onclick: () => onCloseBrowser(profile)
-    }, '✕ ปิด Chrome'));
+    }, '✕ ปิดโครม'));
 
     actions.appendChild(el('button', {
       class: 'btn-danger',
@@ -572,7 +620,7 @@
   async function onLoginChrome(profile) {
     try {
       const r = await api(`/api/profiles/${profile.id}/login-chrome`, { method: 'POST' });
-      showToast('เปิด Chrome แล้ว', r.message || 'login ใน Chrome → ปิด Chrome เองหลังเสร็จ', 'success');
+      showToast('เปิดโครมแล้ว', r.message || 'เข้าสู่ระบบในโครม → ปิดโครมเองหลังเสร็จ', 'success');
     } catch (e) {
       showToast('ผิดพลาด', e.message, 'danger');
     }
@@ -584,21 +632,21 @@
   async function onAutoLogin(profile) {
     try {
       const r = await api(`/api/profiles/${profile.id}/auto-login`, { method: 'POST' });
-      showToast('Auto-login', r.message || 'กำลังเปิด Chrome + กรอกรหัสให้...', 'info');
+      showToast('เข้าสู่ระบบอัตโนมัติ', r.message || 'กำลังเปิดโครม + กรอกรหัสให้...', 'info');
     } catch (e) {
-      showToast('Auto-login ไม่สำเร็จ', e.message, 'danger');
+      showToast('เข้าสู่ระบบอัตโนมัติไม่สำเร็จ', e.message, 'danger');
     }
   }
 
   async function onSyncCookies(profile) {
     try {
       const r = await api(`/api/profiles/${profile.id}/sync-cookies`, { method: 'POST' });
-      showToast('Sync cookies แล้ว',
-        `บันทึก ${r.saved || 0} cookies` + (r.logged_in ? ' (login OK)' : ' (ยังไม่ login)'),
+      showToast('ซิงก์คุกกี้แล้ว',
+        `บันทึก ${r.saved || 0} คุกกี้` + (r.logged_in ? ' (เข้าสู่ระบบสำเร็จ)' : ' (ยังไม่เข้าสู่ระบบ)'),
         r.logged_in ? 'success' : 'warning');
       refresh();
     } catch (e) {
-      showToast('Sync ผิดพลาด', e.message, 'danger');
+      showToast('ซิงก์ผิดพลาด', e.message, 'danger');
     }
   }
 
@@ -618,14 +666,14 @@
   async function onCloseBrowser(profile) {
     try {
       await api(`/api/profiles/${profile.id}/close-browser`, { method: 'POST' });
-      showToast('ปิด Chrome แล้ว', profile.name, 'info');
+      showToast('ปิดโครมแล้ว', profile.name, 'info');
     } catch (e) {
       showToast('ผิดพลาด', e.message, 'danger');
     }
   }
 
   async function onDeleteProfile(profile) {
-    if (!confirm(`ลบบัญชี "${profile.name}"?\nโฟลเดอร์ Chrome profile จะยังอยู่ในกรณีต้องการกู้คืน`)) return;
+    if (!confirm(`ลบบัญชี "${profile.name}"?\nโฟลเดอร์โปรไฟล์โครมจะยังอยู่ในกรณีต้องการกู้คืน`)) return;
     try {
       await api(`/api/profiles/${profile.id}`, { method: 'DELETE' });
       showToast('ลบแล้ว', profile.name, 'success');
@@ -649,7 +697,7 @@
     const panel = el('div', { class: 'modal-panel' });
     panel.appendChild(el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:20px' },
       el('div', null,
-        el('div', { class: 'label-jp' }, '新規追加'),
+        el('div', { class: 'label-jp' }, 'เพิ่มใหม่'),
         el('div', { class: 'panel-title', style: 'font-size:18px' },
           'เพิ่มบัญชี ' + TABS.find(t => t.key === platform).label)
       ),
@@ -662,7 +710,7 @@
     form.appendChild(el('div', { style: 'margin-bottom:14px' },
       el('label', null, 'ชื่อกำกับ ', el('span', { style: 'color:var(--danger)' }, '*')),
       el('input', { type: 'text', name: 'name', required: 'required',
-        placeholder: platform === 'facebook' ? 'เช่น "เฟสหลัก 1"' :
+        placeholder: platform === 'facebook' ? 'เช่น "บัญชีหลัก 1"' :
                      platform === 'x' ? 'เช่น "บัญชี X สำหรับติดตามช่อง"' :
                      'เช่น "บัญชี IG ติดตาม Reels"' })
     ));
@@ -678,34 +726,34 @@
         el('input', { type: 'password', name: 'fb_password', required: 'required' })
       ));
       form.appendChild(el('div', { style: 'margin-bottom:14px' },
-        el('label', null, '2FA secret (ถ้ามี)'),
-        el('input', { type: 'text', name: 'fb_2fa_secret', placeholder: 'OTP secret (optional)' })
+        el('label', null, 'รหัสลับยืนยันสองชั้น (ถ้ามี)'),
+        el('input', { type: 'text', name: 'fb_2fa_secret', placeholder: 'รหัสลับ OTP (ไม่บังคับ)' })
       ));
     } else {
       // X / IG: only handle (optional, for reference)
       form.appendChild(el('div', { style: 'margin-bottom:14px' },
-        el('label', null, '@ Handle (จะ login ผ่าน Chrome — แค่กรอกไว้อ้างอิง)'),
+        el('label', null, '@ ชื่อบัญชี (จะเข้าสู่ระบบผ่านโครม — แค่กรอกไว้อ้างอิง)'),
         el('input', { type: 'text', name: 'account_handle',
           placeholder: platform === 'x' ? '@username' : '@username' })
       ));
       form.appendChild(el('div', { class: 'platform-help', style: 'margin-bottom:14px' },
         platform === 'x'
-          ? 'หลังเพิ่มบัญชี → กด "🌐 เปิด Chrome login" → ใส่ user/pass ใน Chrome window ที่เปิดขึ้น → ปิด Chrome เมื่อ login เสร็จ → กด "🔄 Sync cookies"'
-          : 'หลังเพิ่มบัญชี → กด "🌐 เปิด Chrome login" → ใส่ user/pass ใน Chrome window ที่เปิดขึ้น → ปิด Chrome เมื่อ login เสร็จ → กด "🔄 Sync cookies"'
+          ? 'หลังเพิ่มบัญชี → กด "🌐 เปิดโครมเพื่อเข้าสู่ระบบ" → ใส่ชื่อผู้ใช้/รหัสผ่านในหน้าต่างโครมที่เปิดขึ้น → ปิดโครมเมื่อเข้าสู่ระบบเสร็จ → กด "🔄 ซิงก์คุกกี้"'
+          : 'หลังเพิ่มบัญชี → กด "🌐 เปิดโครมเพื่อเข้าสู่ระบบ" → ใส่ชื่อผู้ใช้/รหัสผ่านในหน้าต่างโครมที่เปิดขึ้น → ปิดโครมเมื่อเข้าสู่ระบบเสร็จ → กด "🔄 ซิงก์คุกกี้"'
       ));
     }
 
     // Proxy (optional, all platforms)
     const proxyDetails = el('details', { style: 'margin-bottom:14px' },
       el('summary', { style: 'font-size:12px;color:var(--text-secondary);cursor:pointer;margin-bottom:10px' },
-        'ตั้งค่า Proxy (ถ้าต้องการ)'),
+        'ตั้งค่าพร็อกซี (ถ้าต้องการ)'),
       el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px' },
         el('div', null,
-          el('label', null, 'Proxy host'),
+          el('label', null, 'โฮสต์พร็อกซี'),
           el('input', { type: 'text', name: 'proxy_host', placeholder: '192.168.1.1' })
         ),
         el('div', null,
-          el('label', null, 'Proxy port'),
+          el('label', null, 'พอร์ตพร็อกซี'),
           el('input', { type: 'number', name: 'proxy_port', placeholder: '8080' })
         )
       )
@@ -715,7 +763,7 @@
     // Submit
     form.appendChild(el('div', { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:18px' },
       el('button', { type: 'button', class: 'btn-ghost', onclick: () => modal.remove() }, 'ยกเลิก'),
-      el('button', { type: 'submit', class: 'btn-primary' }, '＋ เพิ่มบัญชี')
+      el('button', { type: 'submit', class: 'btn-primary' }, '+ เพิ่มบัญชี')
     ));
 
     panel.appendChild(form);
@@ -748,10 +796,10 @@
     if (platform === 'facebook' && body.fb_username && body.fb_password && created?.id) {
       try {
         const result = await api(`/api/profiles/${created.id}/auto-login`, { method: 'POST' });
-        showToast('กำลังเปิด Chrome', result.message || 'กรอก email + รหัสผ่านให้แล้ว', 'info');
+        showToast('กำลังเปิดโครม', result.message || 'กรอกอีเมล + รหัสผ่านให้แล้ว', 'info');
       } catch (e) {
-        showToast('Auto-login ไม่สำเร็จ',
-          e.message + ' — กด "🌐 เปิด Chrome" ในตาราง เพื่อ login เอง', 'warning');
+        showToast('เข้าสู่ระบบอัตโนมัติไม่สำเร็จ',
+          e.message + ' — กด "🌐 เปิดโครม" ในตาราง เพื่อเข้าสู่ระบบเอง', 'warning');
       }
     }
   }
@@ -772,7 +820,7 @@
 
       const text = (item.textContent || '').trim();
       if (text.includes(NAV_TH)) {
-        // เมนู "จัดการเฟส" — show overlay
+        // เมนู "จัดการบัญชี" — show overlay
         activateMyView();
       } else {
         // เมนูอื่น → ซ่อน overlay
@@ -794,7 +842,7 @@
       return;
     }
     if (_retryProbeTimer) { clearTimeout(_retryProbeTimer); _retryProbeTimer = null; }
-    console.log('[profiles-injection] backend พร้อม — รอ user เลือกเมนู "จัดการเฟส"');
+    console.log('[profiles-injection] backend พร้อม — รอ user เลือกเมนู "จัดการบัญชี"');
     _attachImeListeners();   // ✅ FIX IME: ติดตาม composition + focus events
     setupNavClickListener();
   }
