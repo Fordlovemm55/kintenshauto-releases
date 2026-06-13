@@ -851,7 +851,8 @@ img.empty-illustration {
   font-weight: 600;
   box-shadow: inset 3px 0 0 var(--samurai-red);
 }
-.nav-item .icon { color: var(--samurai-red-bright); }
+.nav-item .icon { color: inherit; width: auto; }
+.empty-icon { display: block; margin: 0 auto 12px; color: var(--text-dim); }
 .nav-item img.icon { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); }
 .nav-item.active img.icon { box-shadow: 0 2px 8px rgba(99, 102, 241, 0.5); }
 

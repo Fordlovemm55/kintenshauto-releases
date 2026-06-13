@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import Icon from './Icon';
 
 const API = 'http://localhost:3003';
 
 const FRIENDLY_NAMES = {
   ffmpeg: 'FFmpeg — ตัด/ต่อวิดีโอ',
-  ffprobe: 'FFprobe — อ่าน metadata วิดีโอ',
-  'yt-dlp': 'yt-dlp — ดาวน์โหลดคลิปจาก YouTube/TikTok/FB',
+  ffprobe: 'FFprobe — อ่านข้อมูลกำกับวิดีโอ',
+  'yt-dlp': 'yt-dlp — ดาวน์โหลดคลิปจาก ยูทูบ/ติ๊กต็อก/เฟซบุ๊ก',
   fpcalc: 'fpcalc — หาลายนิ้วมือเสียง (เลือกใช้ได้)',
 };
 
@@ -54,8 +55,8 @@ export default function DepsRequiredScreen({ status, onInstalled }) {
           onInstalled?.(fresh);
         }
       } else {
-        setError('ติดตั้งแล้วแต่ยังเช็คไม่ผ่าน: ขาด ' + fresh.missing.join(', ')
-          + ' — restart แอปแล้วลองอีกครั้ง');
+        setError('ติดตั้งแล้วแต่ยังตรวจไม่ผ่าน: ขาด ' + fresh.missing.join(', ')
+          + ' — เริ่มโปรแกรมใหม่แล้วลองอีกครั้ง');
       }
     } catch (e) {
       setError(e.message || 'ดาวน์โหลดไม่สำเร็จ');
@@ -75,12 +76,12 @@ export default function DepsRequiredScreen({ status, onInstalled }) {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 9999,
-      background: 'radial-gradient(ellipse at center, #2a0a1a 0%, #0a0a0d 100%)',
+      background: 'linear-gradient(160deg, #fbeaf6 0%, #f3e6fb 45%, #ece2fb 100%)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20
     }}>
       <div className="panel" style={{ maxWidth: 540, width: '100%', padding: 30 }}>
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
-          <div className="kanji-title" style={{ fontSize: 56, color: 'var(--danger)' }}>必要</div>
+          <Icon name="empty-generic" className="empty-icon" size={52} />
           <div style={{ fontSize: 16, fontWeight: 500, marginTop: 6 }}>
             ขาดไฟล์ระบบที่จำเป็น
           </div>

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ClipPreviewModal from './ClipPreviewModal';
+import Icon from './Icon';
 
 const FRESH_DURATION_MS = 15000; // job pulses + shows "ใหม่" badge for 15s
 
@@ -27,7 +28,6 @@ const STATUS_BADGE = (s) => {
 export default function QueueView({ showToast }) {
   const [groups, setGroups] = useState([]);
   const [worker, setWorker] = useState({ paused: false, pausedUntil: null });
-  const [pendingDownloads, setPendingDownloads] = useState([]);
   const [filter, setFilter] = useState('all');
   const [expanded, setExpanded] = useState(new Set());
   const [editingPageId, setEditingPageId] = useState(null);
@@ -41,13 +41,11 @@ export default function QueueView({ showToast }) {
   // queue is long. On first mount we seed the seen-set silently so existing
   // items don't all flash at once.
   const seenJobIdsRef = useRef(null);
-  const seenPendingIdsRef = useRef(null);
   const [freshJobs, setFreshJobs] = useState(() => new Set());
-  const [freshPendings, setFreshPendings] = useState(() => new Set());
 
-  const markFresh = useCallback((newIds, isPending) => {
+  const markFresh = useCallback((newIds) => {
     if (!newIds.length) return;
-    const setter = isPending ? setFreshPendings : setFreshJobs;
+    const setter = setFreshJobs;
     setter(prev => {
       const next = new Set(prev);
       for (const id of newIds) next.add(id);
@@ -66,15 +64,11 @@ export default function QueueView({ showToast }) {
 
   const refresh = useCallback(async () => {
     try {
-      const [g, w, p] = await Promise.all([
+      const [g, w] = await Promise.all([
         fetch(`${API}/api/queue/grouped`).then(r => r.json()).catch(() => []),
         fetch(`${API}/api/worker/status`).then(r => r.json()).catch(() => ({})),
-        fetch(`${API}/api/watcher/pending?limit=20`).then(r => r.json()).catch(() => []),
       ]);
       const groupsArr = Array.isArray(g) ? g : [];
-      const pendingArr = Array.isArray(p)
-        ? p.filter(x => x.status === 'pending' || x.status === 'downloading' || x.status === 'failed')
-        : [];
 
       // Diff job IDs vs the seen-set from the previous tick
       const currentJobIds = new Set();
@@ -90,26 +84,11 @@ export default function QueueView({ showToast }) {
           if (!seenJobIdsRef.current.has(id)) newJobIds.push(id);
         }
         for (const id of newJobIds) seenJobIdsRef.current.add(id);
-        markFresh(newJobIds, false);
-      }
-
-      // Same dance for pending-downloads — flash a row when an approval first
-      // appears (i.e. user just clicked Approve in the Watcher tab)
-      const currentPendingIds = new Set(pendingArr.map(x => x.id));
-      if (seenPendingIdsRef.current === null) {
-        seenPendingIdsRef.current = currentPendingIds;
-      } else {
-        const newPendingIds = [];
-        for (const id of currentPendingIds) {
-          if (!seenPendingIdsRef.current.has(id)) newPendingIds.push(id);
-        }
-        for (const id of newPendingIds) seenPendingIdsRef.current.add(id);
-        markFresh(newPendingIds, true);
+        markFresh(newJobIds);
       }
 
       setGroups(groupsArr);
       setWorker(w || {});
-      setPendingDownloads(pendingArr);
     } catch (e) { console.error('queue refresh:', e); }
   }, [markFresh]);
 
@@ -185,7 +164,7 @@ export default function QueueView({ showToast }) {
       await fetch(`${API}/api/worker/resume`, { method: 'POST' });
       showToast?.('กลับมาทำงาน', 'ระบบโพสต์ทำงานต่อ', 'success');
       await refresh();
-    } catch { showToast?.('ผิดพลาด', 'resume ไม่สำเร็จ', 'error'); }
+    } catch { showToast?.('ผิดพลาด', 'กลับมาทำงานไม่สำเร็จ', 'error'); }
   };
 
   const pauseCountdown = useCountdown(worker.pausedUntil);
@@ -254,58 +233,21 @@ export default function QueueView({ showToast }) {
         )}
       </div>
 
-      {/* PENDING DOWNLOADS — approved clips that haven't reached the job queue yet */}
-      {pendingDownloads.length > 0 && (
-        <div className="panel" style={{ padding: 14, marginBottom: 12,
-                                        borderLeft: '3px solid var(--info)' }}>
-          <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}>
-            ⏳ คลิปกำลังเตรียม · ยังไม่เข้าคิว ({pendingDownloads.length} รายการ)
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-            อนุมัติแล้ว — ระบบกำลังดาวน์โหลด/ตัดต่อ จะปรากฏในคิวด้านล่างเมื่อพร้อม
-          </div>
-          {pendingDownloads.map(p => {
-            const isFresh = freshPendings.has(p.id);
-            return (
-              <div key={p.id}
-                   className={isFresh ? 'queue-fresh-row' : ''}
-                   style={{
-                     padding: '6px 8px', borderTop: '0.5px solid var(--border-faint)',
-                     display: 'flex', justifyContent: 'space-between', gap: 10,
-                     position: 'relative'
-                   }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 12, overflow: 'hidden',
-                                textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    📥 {p.title || p.source_url}
-                  </div>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-                    ช่อง {p.channel_label || '—'}
-                    {p.status === 'downloading' && p.download_progress != null
-                      && <> · กำลังโหลด {p.download_progress}%</>}
-                    {p.status === 'failed' && p.download_error
-                      && <> · <span style={{ color: 'var(--danger)' }}>ผิดพลาด: {p.download_error.slice(0, 60)}</span></>}
-                  </div>
-                </div>
-                <span className={`badge badge-${p.status === 'failed' ? 'danger'
-                                              : p.status === 'downloading' ? 'gold' : 'info'}`}
-                      style={{ fontSize: 10, alignSelf: 'center' }}>
-                  {p.status === 'failed' ? 'ผิดพลาด'
-                   : p.status === 'downloading' ? 'กำลังดาวน์โหลด'
-                   : 'รอดาวน์โหลด'}
-                </span>
-                {isFresh && <span className="queue-fresh-badge">✨ ใหม่</span>}
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {/* Pending approvals live in the Channel Watcher overlay — that is the
+          authoritative approve/reject UI. We only point users there. */}
+      <div style={{
+        marginBottom: 12, padding: '8px 12px',
+        background: 'var(--surface-2)', borderLeft: '3px solid var(--info)',
+        borderRadius: 4, fontSize: 11, color: 'var(--text-muted)'
+      }}>
+        ℹ️ คลิปที่รออนุมัติ ดูได้ที่เมนู "ตามช่องอัตโนมัติ"
+      </div>
 
       {/* QUEUE BODY */}
       <div className="panel">
         <div className="panel-header">
           <div>
-            <div className="label-jp">待機列</div>
+            <div className="label-jp">คิวงาน</div>
             <div className="panel-title">
               คิวงาน — จัดเป็นเซ็ตตามเรื่อง
               {freshJobs.size > 0 && (
@@ -335,7 +277,7 @@ export default function QueueView({ showToast }) {
 
         {filteredGroups.length === 0 ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
-            <div className="kanji-title" style={{ fontSize: 48, marginBottom: 12, opacity: 0.4 }}>空</div>
+            <Icon name="empty-queue" className="empty-icon" size={56} />
             <div style={{ fontSize: 13 }}>ยังไม่มีงานในคิว</div>
           </div>
         ) : (
@@ -408,27 +350,35 @@ function PageGroup({ page, expanded, toggleSet, editingPageId, setEditingPageId,
         </button>
       </div>
 
-      {/* Always-visible schedule strip — daily quota + post times */}
-      <div style={{
-        padding: '6px 10px', margin: '0 4px 8px',
-        background: noSchedule ? 'rgba(232,123,123,0.08)' : 'var(--surface-2)',
-        border: '0.5px solid ' + (noSchedule ? 'var(--danger)' : 'var(--border-faint)'),
-        borderRadius: 4, fontSize: 11
-      }}>
-        {noSchedule ? (
-          <span style={{ color: 'var(--danger)' }}>
-            ⚠ ยังไม่ได้ตั้งเวลาโพสต์ — คลิปจะไม่เข้าคิว · กด <strong>⚙ แก้ตั้งค่า</strong> ด้านขวาเพื่อตั้งเวลา
+      {/* Always-visible schedule strip — daily quota + post times.
+          When unscheduled, show a friendly inline warning banner. */}
+      {noSchedule ? (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 12px', margin: '0 4px 8px',
+          background: 'var(--warning-bg, var(--surface-2))',
+          border: '1px solid var(--warning)',
+          borderRadius: 8, fontSize: 11, color: 'var(--text-secondary)'
+        }}>
+          <span style={{ fontSize: 14, lineHeight: 1 }}>⚠️</span>
+          <span>
+            ยังไม่ได้ตั้งเวลาโพสต์ — คลิปจะไม่เข้าคิว · กด <strong>⚙ แก้ตั้งค่า</strong> ด้านขวาเพื่อตั้งเวลา
           </span>
-        ) : (
-          <>
-            <span style={{ color: 'var(--gold)' }}>📅 ลงวันละ {page.daily_quota} คลิป</span>
-            <span style={{ color: 'var(--text-muted)', margin: '0 6px' }}>·</span>
-            <span style={{ color: 'var(--text-secondary)' }}>
-              เวลาโพสต์: {page.post_times.join(' · ')}
-            </span>
-          </>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div style={{
+          padding: '6px 10px', margin: '0 4px 8px',
+          background: 'var(--surface-2)',
+          border: '0.5px solid var(--border-faint)',
+          borderRadius: 4, fontSize: 11
+        }}>
+          <span style={{ color: 'var(--gold)' }}>📅 ลงวันละ {page.daily_quota} คลิป</span>
+          <span style={{ color: 'var(--text-muted)', margin: '0 6px' }}>·</span>
+          <span style={{ color: 'var(--text-secondary)' }}>
+            เวลาโพสต์: {page.post_times.join(' · ')}
+          </span>
+        </div>
+      )}
 
       {editingPageId === page.page_id && (
         <PageSettingsEditor page={page} showToast={showToast}
@@ -514,7 +464,7 @@ function ClipRow({ job, onPreview, showToast, refresh, isFresh }) {
            position: 'relative'
          }}>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>
-        EP {job.clip_index}
+        ตอน {job.clip_index}
         {isFresh && <span className="queue-fresh-badge"
                           style={{ position: 'static', marginLeft: 6 }}>✨ ใหม่</span>}
       </div>
@@ -524,7 +474,7 @@ function ClipRow({ job, onPreview, showToast, refresh, isFresh }) {
         </span>
         {job.fb_post_id && (
           <span style={{ fontSize: 10, color: 'var(--success)' }}>
-            ✓ FB: {job.fb_post_id.slice(0, 20)}...
+            ✓ เฟซบุ๊ก: {job.fb_post_id.slice(0, 20)}...
           </span>
         )}
         {job.error_message && (
@@ -533,7 +483,7 @@ function ClipRow({ job, onPreview, showToast, refresh, isFresh }) {
       </div>
       <div className="btn-row-dense" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
         <button className="btn-ghost" style={{ fontSize: 11, padding: '3px 8px' }}
-                onClick={onPreview} title="ดู / แก้แคปชั่น" aria-label={`ดูคลิป EP ${job.clip_index}`}>👁 ดู</button>
+                onClick={onPreview} title="ดู / แก้แคปชั่น" aria-label={`ดูคลิป ตอน ${job.clip_index}`}>👁 ดู</button>
         {isPending && (
           <button className="btn-ghost" style={{ fontSize: 11, padding: '3px 8px' }}
                   disabled={busy}

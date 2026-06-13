@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { LogoMark } from './components/Icon';
 import LoginScreen from './login/LoginScreen';
 import SetupWizard from './setup-wizard/SetupWizard';
 import Dashboard from './Dashboard';
@@ -184,8 +185,7 @@ function LoadingScreen() {
       height: '100vh',
       background: 'radial-gradient(900px 520px at 50% -10%, rgba(99,102,241,0.12), transparent 60%), #0f172a'
     }}>
-      <img src="./assets/ui/crest.png" alt="" width={104} height={104}
-           style={{ objectFit: 'cover', borderRadius: '24%', boxShadow: '0 6px 18px rgba(0,0,0,0.5)', marginBottom: 10 }} />
+      <div style={{ marginBottom: 10 }}><LogoMark size={96} radius={22} /></div>
       <div style={{
         fontFamily: 'Mali, Sarabun, sans-serif',
         fontSize: 36, fontWeight: 700, color: '#818cf8', letterSpacing: 0

@@ -31,6 +31,7 @@
     "ghost-cursor": "^1.2.0",
     "https-proxy-agent": "^9.1.0",
     "jsdom": "^29.1.1",
+    "lucide-react": "^1.18.0",
     "node-cron": "^3.0.3",
     "puppeteer-core": "^23.0.0",
     "puppeteer-extra": "^3.3.6",

@@ -1,24 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import SamuraiBackground from '../components/SamuraiBackground';
+import Icon from '../components/Icon';
 import '../theme/samurai.css';
 
 /**
- * KINTENSHAUTO Setup Wizard · 初期設定
+ * ตัวช่วยตั้งค่า ออโต้โพสต์ดีว๊ะ · การตั้งค่าครั้งแรก
  *
  * 5 ขั้นตอน:
- * 1. Welcome - ต้อนรับ + คำเตือนการใช้งาน
- * 2. Dependencies - ตรวจ + ติดตั้ง FFmpeg/yt-dlp/Chrome
- * 3. First Profile - เพิ่มเฟส FB เฟสแรก (optional, ทำทีหลังได้)
- * 4. AI Provider - ใส่ API key (optional)
- * 5. Complete - เสร็จ + สอนวิธีใช้
+ * 1. ต้อนรับ - ต้อนรับ + คำเตือนการใช้งาน
+ * 2. เครื่องมือ - ตรวจ + ติดตั้ง FFmpeg/yt-dlp/โครม
+ * 3. บัญชีแรก - เพิ่มบัญชี เฟซบุ๊ก บัญชีแรก (ไม่บังคับ ทำทีหลังได้)
+ * 4. AI - ใส่ API key (ไม่บังคับ)
+ * 5. เสร็จสิ้น - เสร็จ + สอนวิธีใช้
  */
 
 const STEPS = [
-  { num: 1, jp: '始め',   th: 'เริ่มต้น' },
-  { num: 2, jp: '道具',   th: 'เครื่องมือ' },
-  { num: 3, jp: '盟友',   th: 'เฟส' },
-  { num: 4, jp: '知恵',   th: 'AI' },
-  { num: 5, jp: '出陣',   th: 'พร้อม' }
+  { num: 1, jp: 'ออกเดิน', th: 'เริ่มต้น' },
+  { num: 2, jp: 'ศาสตรา', th: 'เครื่องมือ' },
+  { num: 3, jp: 'พันธมิตร', th: 'บัญชี' },
+  { num: 4, jp: 'ปัญญา',   th: 'AI' },
+  { num: 5, jp: 'ออกศึก',  th: 'พร้อม' }
 ];
 
 export default function SetupWizard({ onComplete }) {
@@ -31,7 +32,7 @@ export default function SetupWizard({ onComplete }) {
     proxy_host: '', proxy_port: '', proxy_user: '', proxy_pass: ''
   });
   const [aiConfig, setAiConfig] = useState({
-    provider: 'openai', model: 'gpt-4o-mini', api_key: '', label: 'Provider หลัก'
+    provider: 'openai', model: 'gpt-4o-mini', api_key: '', label: 'ผู้ให้บริการหลัก'
   });
   const [skippedProfile, setSkippedProfile] = useState(false);
   const [skippedAI, setSkippedAI] = useState(false);
@@ -54,7 +55,7 @@ export default function SetupWizard({ onComplete }) {
 
   const checkDeps = async () => {
     if (!window.kintenshauto) {
-      setDeps({ ready: false, results: [], error: 'Electron API ไม่พร้อม (dev mode)' });
+      setDeps({ ready: false, results: [], error: 'Electron API ไม่พร้อม (โหมดพัฒนา)' });
       return;
     }
     const result = await window.kintenshauto.checkDeps();
@@ -98,7 +99,7 @@ export default function SetupWizard({ onComplete }) {
       }
       onComplete?.();
     } catch (e) {
-      alert('บันทึกล้มเหลว: ' + e.message + '\n\nไม่เป็นไร คุณสามารถตั้งค่าใน app ภายหลังได้');
+      alert('บันทึกล้มเหลว: ' + e.message + '\n\nไม่เป็นไร คุณสามารถตั้งค่าในโปรแกรมภายหลังได้');
       if (window.kintenshauto) await window.kintenshauto.completeSetup();
       onComplete?.();
     }
@@ -106,7 +107,7 @@ export default function SetupWizard({ onComplete }) {
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: 'var(--sumi-ink)' }}>
-      <SamuraiBackground opacity={0.55} />
+      <SamuraiBackground opacity={0.55} variant="setup" />
 
       <div style={{
         position: 'relative', zIndex: 2, width: '100%', height: '100%',
@@ -115,9 +116,9 @@ export default function SetupWizard({ onComplete }) {
       }}>
 
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div className="kanji-title" style={{ fontSize: 48, marginBottom: 4 }}>剣天照</div>
-          <div style={{ fontSize: 13, color: 'var(--gold)', letterSpacing: 3 }}>KINTENSHAUTO · SETUP</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>การตั้งค่าครั้งแรก · 初期設定</div>
+          <div className="brand-wordmark" style={{ fontFamily: 'Mali, Sarabun, sans-serif', fontSize: 48, marginBottom: 4 }}>ออโต้โพสต์ดีว๊ะ</div>
+          <div style={{ fontSize: 13, color: 'var(--gold)', letterSpacing: 3 }}>ตั้งค่าครั้งแรก</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>การตั้งค่าครั้งแรก</div>
         </div>
 
         <div className="setup-steps" style={{ marginBottom: 40 }}>
@@ -154,20 +155,20 @@ export default function SetupWizard({ onComplete }) {
             <>
               <div className="panel-header">
                 <div>
-                  <div className="label-jp">歓迎</div>
+                  <div className="label-jp">ยินดีต้อนรับ</div>
                   <div className="panel-title">ยินดีต้อนรับ</div>
                 </div>
               </div>
               <p style={{ fontSize: 14, lineHeight: 1.8, color: 'var(--text-secondary)' }}>
-                KINTENSHAUTO คือเครื่องมือช่วยโพสต์ Reel บน Facebook อัตโนมัติ — ตั้งแต่หาคลิป ตัดต่อ ใส่แบนเนอร์ สร้างแคปชั่น AI ไปจนถึงโพสต์และคอมเม้นให้อัตโนมัติ
+                ออโต้โพสต์ดีว๊ะ คือเครื่องมือช่วยโพสต์ รีล บนเฟซบุ๊กอัตโนมัติ — ตั้งแต่หาคลิป ตัดต่อ ใส่แบนเนอร์ สร้างแคปชันด้วย AI ไปจนถึงโพสต์และคอมเมนต์ให้อัตโนมัติ
               </p>
               <div style={{ margin: '20px 0', padding: 14, background: 'rgba(212,167,72,0.08)', border: '0.5px solid var(--warning)', borderLeft: '3px solid var(--warning)' }}>
                 <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--warning)', marginBottom: 6 }}>⚠ คำเตือนสำคัญ</div>
                 <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, lineHeight: 1.7, color: 'var(--text-secondary)' }}>
-                  <li>โปรแกรมนี้ใช้ automation ที่ Facebook อาจตรวจจับได้ — ใช้ด้วยความระมัดระวัง</li>
-                  <li>ลงคลิปไม่เกินโควต้าที่กำหนด (default 5 คลิป/เพจ/วัน) เพื่อลดความเสี่ยง</li>
+                  <li>โปรแกรมนี้ทำงานอัตโนมัติแบบที่เฟซบุ๊กอาจตรวจจับได้ — ใช้ด้วยความระมัดระวัง</li>
+                  <li>ลงคลิปไม่เกินโควตาที่กำหนด (ค่าเริ่มต้น 5 คลิป/เพจ/วัน) เพื่อลดความเสี่ยง</li>
                   <li>เนื้อหาที่โพสต์ต้องเป็นของคุณหรือได้รับอนุญาต — ผู้ใช้รับผิดชอบเนื้อหาเอง</li>
-                  <li>ถ้าติด checkpoint คนต้องยืนยันเอง ระบบไม่ bypass ให้</li>
+                  <li>ถ้าติดด่านยืนยันตัวตน ผู้ใช้ต้องยืนยันเอง ระบบไม่ข้ามให้</li>
                 </ul>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
@@ -180,9 +181,9 @@ export default function SetupWizard({ onComplete }) {
             <>
               <div className="panel-header">
                 <div>
-                  <div className="label-jp">道具検査</div>
+                  <div className="label-jp">ตรวจเครื่องมือ</div>
                   <div className="panel-title">ตรวจสอบเครื่องมือที่จำเป็น</div>
-                  <div className="panel-subtitle">ต้องมี FFmpeg, yt-dlp, Chrome ก่อนใช้งาน</div>
+                  <div className="panel-subtitle">ต้องมี FFmpeg, yt-dlp และ โครม ก่อนใช้งาน</div>
                 </div>
                 <button onClick={checkDeps} disabled={depsInstalling}>↻ ตรวจซ้ำ</button>
               </div>
@@ -239,15 +240,15 @@ export default function SetupWizard({ onComplete }) {
             <>
               <div className="panel-header">
                 <div>
-                  <div className="label-jp">盟友追加</div>
-                  <div className="panel-title">เพิ่มเฟส Facebook (ไม่บังคับ)</div>
-                  <div className="panel-subtitle">ข้ามขั้นตอนนี้ได้ ค่อยเพิ่มใน app ทีหลัง</div>
+                  <div className="label-jp">เพิ่มพันธมิตร</div>
+                  <div className="panel-title">เพิ่มบัญชีเฟซบุ๊ก (ไม่บังคับ)</div>
+                  <div className="panel-subtitle">ข้ามขั้นตอนนี้ได้ ค่อยเพิ่มในโปรแกรมทีหลัง</div>
                 </div>
               </div>
 
               {skippedProfile ? (
                 <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>
-                  ข้ามขั้นตอนนี้แล้ว — เพิ่มเฟสได้ภายหลังในเมนู "จัดการเฟส"
+                  ข้ามขั้นตอนนี้แล้ว — เพิ่มบัญชีได้ภายหลังในเมนู "จัดการบัญชี"
                   <div style={{ marginTop: 16 }}>
                     <button onClick={() => setSkippedProfile(false)}>ย้อนกลับมากรอก</button>
                   </div>
@@ -256,37 +257,42 @@ export default function SetupWizard({ onComplete }) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div style={{ gridColumn: '1 / 3' }}>
                     <label>ชื่อกำกับ *</label>
-                    <input value={profile.name} onChange={e => setProfile({...profile, name: e.target.value})} placeholder="เช่น เฟสหลัก 1"/>
+                    <input value={profile.name} onChange={e => setProfile({...profile, name: e.target.value})} placeholder="เช่น บัญชีหลัก 1"/>
                   </div>
                   <div>
-                    <label>FB username / email *</label>
+                    <label>ชื่อผู้ใช้ / อีเมล เฟซบุ๊ก *</label>
                     <input value={profile.fb_username} onChange={e => setProfile({...profile, fb_username: e.target.value})}/>
                   </div>
                   <div>
                     <label>รหัสผ่าน *</label>
                     <input type="password" value={profile.fb_password} onChange={e => setProfile({...profile, fb_password: e.target.value})}/>
                   </div>
-                  <div style={{ gridColumn: '1 / 3' }}>
-                    <label>2FA secret (ถ้ามี - optional)</label>
-                    <input value={profile.fb_2fa_secret} onChange={e => setProfile({...profile, fb_2fa_secret: e.target.value})} placeholder="TOTP secret (base32)"/>
-                  </div>
-                  <div className="jp-divider" style={{ gridColumn: '1 / 3' }}>プロキシ · Proxy (แนะนำ)</div>
-                  <div>
-                    <label>Proxy host</label>
-                    <input value={profile.proxy_host} onChange={e => setProfile({...profile, proxy_host: e.target.value})}/>
-                  </div>
-                  <div>
-                    <label>Port</label>
-                    <input value={profile.proxy_port} onChange={e => setProfile({...profile, proxy_port: e.target.value})}/>
-                  </div>
-                  <div>
-                    <label>Proxy user</label>
-                    <input value={profile.proxy_user} onChange={e => setProfile({...profile, proxy_user: e.target.value})}/>
-                  </div>
-                  <div>
-                    <label>Proxy pass</label>
-                    <input type="password" value={profile.proxy_pass} onChange={e => setProfile({...profile, proxy_pass: e.target.value})}/>
-                  </div>
+                  <details style={{ gridColumn: '1 / 3' }}>
+                    <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>ตัวเลือกขั้นสูง (ไม่จำเป็น)</summary>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div style={{ gridColumn: '1 / 3' }}>
+                        <label>รหัสลับ 2FA (ถ้ามี)</label>
+                        <input value={profile.fb_2fa_secret} onChange={e => setProfile({...profile, fb_2fa_secret: e.target.value})} placeholder="รหัสลับ TOTP (base32)"/>
+                      </div>
+                      <div className="jp-divider" style={{ gridColumn: '1 / 3' }}>พร็อกซี (แนะนำ)</div>
+                      <div>
+                        <label>โฮสต์พร็อกซี</label>
+                        <input value={profile.proxy_host} onChange={e => setProfile({...profile, proxy_host: e.target.value})}/>
+                      </div>
+                      <div>
+                        <label>พอร์ต</label>
+                        <input value={profile.proxy_port} onChange={e => setProfile({...profile, proxy_port: e.target.value})}/>
+                      </div>
+                      <div>
+                        <label>ผู้ใช้พร็อกซี</label>
+                        <input value={profile.proxy_user} onChange={e => setProfile({...profile, proxy_user: e.target.value})}/>
+                      </div>
+                      <div>
+                        <label>รหัสผ่านพร็อกซี</label>
+                        <input type="password" value={profile.proxy_pass} onChange={e => setProfile({...profile, proxy_pass: e.target.value})}/>
+                      </div>
+                    </div>
+                  </details>
                 </div>
               )}
 
@@ -304,22 +310,22 @@ export default function SetupWizard({ onComplete }) {
             <>
               <div className="panel-header">
                 <div>
-                  <div className="label-jp">知恵の源</div>
-                  <div className="panel-title">ตั้งค่า AI สำหรับแคปชั่น (ไม่บังคับ)</div>
-                  <div className="panel-subtitle">รองรับ OpenAI / Claude / Gemini — ข้ามได้</div>
+                  <div className="label-jp">บ่อเกิดปัญญา</div>
+                  <div className="panel-title">ตั้งค่า AI สำหรับแคปชัน (ไม่บังคับ)</div>
+                  <div className="panel-subtitle">รองรับ โอเพนเอไอ / Claude / เจมิไน — ข้ามได้</div>
                 </div>
               </div>
 
               {skippedAI ? (
                 <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>
-                  ข้ามขั้นตอนนี้แล้ว — ถ้าไม่ตั้ง AI ระบบจะใช้ template caption แทน
+                  ข้ามขั้นตอนนี้แล้ว — ถ้าไม่ตั้ง AI ระบบจะใช้แคปชันจากแม่แบบแทน
                   <div style={{ marginTop: 16 }}>
                     <button onClick={() => setSkippedAI(false)}>ย้อนกลับมากรอก</button>
                   </div>
                 </div>
               ) : (
                 <>
-                  <label>Provider</label>
+                  <label>ผู้ให้บริการ</label>
                   <select
                     value={aiConfig.provider}
                     onChange={e => {
@@ -333,25 +339,25 @@ export default function SetupWizard({ onComplete }) {
                     }}
                     style={{ marginBottom: 12 }}
                   >
-                    <option value="openai">OpenAI (GPT)</option>
-                    <option value="anthropic">Anthropic (Claude)</option>
-                    <option value="gemini">Google Gemini</option>
+                    <option value="openai">โอเพนเอไอ (GPT)</option>
+                    <option value="anthropic">แอนโทรปิก (Claude)</option>
+                    <option value="gemini">กูเกิล เจมิไน</option>
                   </select>
 
-                  <label>Model</label>
+                  <label>โมเดล</label>
                   <input value={aiConfig.model} onChange={e => setAiConfig({...aiConfig, model: e.target.value})} style={{ marginBottom: 12 }}/>
 
-                  <label>API Key *</label>
+                  <label>คีย์ API *</label>
                   <input
                     type="password"
                     value={aiConfig.api_key}
                     onChange={e => setAiConfig({...aiConfig, api_key: e.target.value})}
-                    placeholder="sk-... หรือ key จาก provider"
+                    placeholder="sk-... หรือคีย์จากผู้ให้บริการ"
                     style={{ marginBottom: 12 }}
                   />
 
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: 10, background: 'var(--surface-2)' }}>
-                    💡 API key จะถูก encrypt เก็บในเครื่องคุณเท่านั้น ไม่ถูกส่งออกไปไหน
+                    💡 คีย์ API จะถูกเข้ารหัสเก็บในเครื่องคุณเท่านั้น ไม่ถูกส่งออกไปไหน
                   </div>
                 </>
               )}
@@ -370,26 +376,25 @@ export default function SetupWizard({ onComplete }) {
             <>
               <div className="panel-header">
                 <div>
-                  <div className="label-jp">出陣</div>
+                  <div className="label-jp">ออกศึก</div>
                   <div className="panel-title">พร้อมใช้งาน</div>
                   <div className="panel-subtitle">การตั้งค่าเริ่มต้นเสร็จสิ้น</div>
                 </div>
               </div>
 
               <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                <div className="kanji-title" style={{ fontSize: 60, marginBottom: 8 }}>出陣</div>
+                <Icon name="empty-generic" className="empty-icon" size={52} />
                 <div style={{ fontSize: 14, color: 'var(--text-primary)', marginBottom: 20 }}>
                   ทุกอย่างพร้อมแล้ว — ลุยกันเลย!
                 </div>
               </div>
 
               <div style={{ background: 'var(--surface-2)', padding: 16, marginBottom: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 10 }}>ขั้นตอนถัดไปหลังเข้า app:</div>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 10 }}>ขั้นต่อไป:</div>
                 <ol style={{ margin: 0, paddingLeft: 20, fontSize: 12, lineHeight: 1.8, color: 'var(--text-secondary)' }}>
-                  <li>ไปเมนู "จัดการเฟส" → login เฟส FB (คนยืนยันเอง)</li>
-                  <li>ไปเมนู "แบนเนอร์" → upload รูปแบนเนอร์ + ตั้งตำแหน่ง</li>
-                  <li>ไปเมนู "คอมเม้นอัตโนมัติ" → สร้าง template</li>
-                  <li>กลับหน้าหลัก → เลือกเพจ + keyword → กด RUN</li>
+                  <li>เพิ่มช่องที่อยากตามดู (เมนู "ตามช่องอัตโนมัติ")</li>
+                  <li>กดอนุมัติคลิปที่ระบบเจอ</li>
+                  <li>ระบบจะตัดต่อและโพสต์ให้อัตโนมัติ</li>
                 </ol>
               </div>
 

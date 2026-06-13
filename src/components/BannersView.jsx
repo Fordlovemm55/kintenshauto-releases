@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { layerToBox, boxToLayer } from '../lib/bannerGeometry.js';
+import Icon from './Icon';
 
 const API = 'http://localhost:3003';
 
@@ -121,7 +122,7 @@ export default function BannersView({ showToast }) {
 
         {banners.length === 0 ? (
           <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-muted)' }}>
-            <img className="empty-illustration" src="./assets/ui/empty-banners.png" alt="" />
+            <Icon name="empty-banners" className="empty-icon" size={56} />
             <div style={{ fontSize: 13 }}>ยังไม่มีรูปแบนเนอร์ — กด "＋ อัปโหลดรูป" เพื่อเริ่ม</div>
           </div>
         ) : (

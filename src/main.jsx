@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { LogoMark } from './components/Icon';
 import App from './App';
 import './theme/samurai.css';
 
@@ -24,7 +25,7 @@ class ErrorBoundary extends React.Component {
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           height: '100vh', padding: 40, textAlign: 'center', background: '#0f172a', color: '#e2e8f0'
         }}>
-          <img src="./assets/ui/crest.png" alt="" width={92} height={92} style={{ objectFit: 'cover', borderRadius: '24%', boxShadow: '0 6px 18px rgba(0,0,0,0.5)', marginBottom: 12 }} />
+          <div style={{ marginBottom: 12 }}><LogoMark size={84} radius={18} /></div>
           <div style={{ fontSize: 18, fontWeight: 600, fontFamily: 'IBM Plex Sans Thai, Sarabun, sans-serif', marginBottom: 8 }}>เกิดข้อผิดพลาดในโปรแกรม</div>
           <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 20, maxWidth: 600 }}>
             {this.state.error?.message || 'ไม่ทราบสาเหตุ'}

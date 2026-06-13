@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import Icon from './Icon';
 
 const API = 'http://localhost:3003';
 
@@ -30,7 +31,7 @@ export default function ReviewsView({ showToast }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       showToast?.('สร้างงานใหม่แล้ว',
-        `เปลี่ยนใช้ Set 2 — job ใหม่ #${data.new_job_id}`, 'success');
+        `เปลี่ยนใช้ชุด 2 — งานใหม่ #${data.new_job_id}`, 'success');
       await refresh();
     } catch (e) { showToast?.('ลองใหม่ไม่สำเร็จ', e.message, 'error'); }
     finally { setBusyFor(jobId, null); }
@@ -57,10 +58,10 @@ export default function ReviewsView({ showToast }) {
       <div className="panel">
         <div className="panel-header">
           <div>
-            <div className="label-jp">検証 · COPYRIGHT REVIEW</div>
+            <div className="label-jp">ตรวจลิขสิทธิ์</div>
             <div className="panel-title">คลิปที่รอตัดสินใจเรื่องลิขสิทธิ์</div>
             <div className="panel-subtitle">
-              คลิปที่โดน Facebook ขึ้นว่าติดลิขสิทธิ์ระหว่างโพสต์ — เลือก "ลอง Set 2" เพื่อใช้คลิปสำรอง
+              คลิปที่โดนเฟซบุ๊กขึ้นว่าติดลิขสิทธิ์ระหว่างโพสต์ — เลือก "ลองชุด 2" เพื่อใช้คลิปสำรอง
               หรือ "ยกเลิก" เพื่อทิ้งงาน · รีเฟรชอัตโนมัติทุก 8 วินาที
             </div>
           </div>
@@ -78,7 +79,7 @@ export default function ReviewsView({ showToast }) {
 
         {pending.length === 0 ? (
           <div style={{ padding: 50, textAlign: 'center', color: 'var(--text-muted)' }}>
-            <div className="kanji-title" style={{ fontSize: 48, marginBottom: 12, opacity: 0.4 }}>清</div>
+            <Icon name="empty-reviews" className="empty-icon" size={56} />
             <div style={{ fontSize: 14, marginBottom: 4 }}>ไม่มีคลิปที่รอตรวจสอบ</div>
             <div style={{ fontSize: 11 }}>ดีมาก — คลิปทั้งหมดผ่านการตรวจลิขสิทธิ์</div>
           </div>
@@ -110,12 +111,12 @@ function ReviewCard({ job, busy, onRetry, onDismiss }) {
         <div style={{ flex: '1 1 300px', minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            ⚠ {job.video_title || `Clip ${job.clip_id}`}
+            ⚠ {job.video_title || `คลิป ${job.clip_id}`}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex',
                         gap: 10, flexWrap: 'wrap' }}>
             <span>📄 เพจ: <strong style={{ color: 'var(--text-secondary)' }}>{job.page_name}</strong></span>
-            <span>🎬 ใช้: Set {job.use_set || 1}</span>
+            <span>🎬 ใช้: ชุด {job.use_set || 1}</span>
             <span>🕒 บล็อก: {formatTime(job.finished_at || job.created_at)}</span>
             {job.retry_count > 0 && <span>🔁 ลองมาแล้ว {job.retry_count} ครั้ง</span>}
           </div>
@@ -138,9 +139,9 @@ function ReviewCard({ job, busy, onRetry, onDismiss }) {
           <button className="btn-primary"
                   onClick={onRetry}
                   disabled={!!busy || !hasSet2}
-                  title={hasSet2 ? 'โพสต์ใหม่ด้วย Set 2' : 'ยังไม่มี Set 2 — กดเพื่อสร้างก่อน'}
+                  title={hasSet2 ? 'โพสต์ใหม่ด้วยชุด 2' : 'ยังไม่มีชุด 2 — กดเพื่อสร้างก่อน'}
                   style={{ fontSize: 12, padding: '6px 12px' }}>
-            {busy === 'retry' ? '⏳ กำลังสร้าง...' : `🔄 ลอง Set ${job.use_set === 1 ? 2 : 1}`}
+            {busy === 'retry' ? '⏳ กำลังสร้าง...' : `🔄 ลองชุด ${job.use_set === 1 ? 2 : 1}`}
           </button>
           <button className="btn-ghost"
                   onClick={onDismiss}

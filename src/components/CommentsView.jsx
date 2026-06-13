@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import Icon from './Icon';
 
 const API = 'http://localhost:3003';
 
@@ -60,10 +61,10 @@ export default function CommentsView({ showToast }) {
       <div className="panel">
         <div className="panel-header">
           <div>
-            <div className="label-jp">言霊 · COMMENT SETTINGS</div>
-            <div className="panel-title">ตั้งค่าคอมเม้นต่อเพจ</div>
+            <div className="label-jp">ตั้งค่าคอมเมนต์</div>
+            <div className="panel-title">ตั้งค่าคอมเมนต์ต่อเพจ</div>
             <div className="panel-subtitle">
-              เลือกเพจเพื่อตั้งค่าการคอมเม้นอัตโนมัติ — หยุดเมื่อโพสต์ครบ / รอเวลา / ปักหมุด
+              เลือกเพจเพื่อตั้งค่าการคอมเมนต์อัตโนมัติ — หยุดเมื่อโพสต์ครบ / รอเวลา / ปักหมุด
             </div>
           </div>
           <select value={selectedPageId || ''}
@@ -99,9 +100,9 @@ export default function CommentsView({ showToast }) {
       <div className="panel">
         <div className="panel-header">
           <div>
-            <div className="label-jp">雛形 · TEMPLATES</div>
+            <div className="label-jp">ข้อความสำเร็จรูป</div>
             <div className="panel-title">
-              ข้อความคอมเม้น ({filteredTemplates.length})
+              ข้อความคอมเมนต์ ({filteredTemplates.length})
               {selectedPageId && (
                 <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>
                   สำหรับ "{pages.find(p => p.id === selectedPageId)?.name}" + ทั่วไป
@@ -121,6 +122,7 @@ export default function CommentsView({ showToast }) {
 
         {filteredTemplates.length === 0 ? (
           <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-muted)' }}>
+            <Icon name="empty-comments" className="empty-icon" size={56} />
             <div style={{ fontSize: 13 }}>ยังไม่มีข้อความ — กด "＋ เพิ่มข้อความ" เพื่อเริ่ม</div>
           </div>
         ) : (
@@ -186,31 +188,31 @@ function PageCommentSettings({ pageId, settings, onSaved, showToast }) {
 
   return (
     <div style={{ padding: 8 }}>
-      <Toggle label="เปิดใช้งานคอมเม้นอัตโนมัติ" checked={!!draft.enabled}
+      <Toggle label="เปิดใช้งานคอมเมนต์อัตโนมัติ" checked={!!draft.enabled}
               onChange={v => set('enabled', v)} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
                     gap: 12, marginTop: 12 }}>
-        <NumberField label="หน่วงก่อนคอมเม้น (วินาที)" value={draft.delay_sec}
+        <NumberField label="หน่วงก่อนคอมเมนต์ (วินาที)" value={draft.delay_sec}
                      onChange={v => set('delay_sec', v)} placeholder="30"
-                     hint="หลังโพสต์เสร็จจะรอกี่วินาทีก่อนคอมเม้น" />
+                     hint="หลังโพสต์เสร็จจะรอกี่วินาทีก่อนคอมเมนต์" />
         <NumberField label="สุ่มเพิ่ม +/- (วินาที)" value={draft.jitter_sec}
                      onChange={v => set('jitter_sec', v)} placeholder="15"
                      hint="เพิ่มความสุ่มไม่ให้เหมือนบอท" />
-        <NumberField label="คอมเม้นสูงสุดต่อวัน" value={draft.max_per_day}
+        <NumberField label="คอมเมนต์สูงสุดต่อวัน" value={draft.max_per_day}
                      onChange={v => set('max_per_day', v)} placeholder="0 = ไม่จำกัด" />
-        <NumberField label="พักระหว่างคอมเม้น (นาที)" value={draft.cooldown_min}
+        <NumberField label="พักระหว่างคอมเมนต์ (นาที)" value={draft.cooldown_min}
                      onChange={v => set('cooldown_min', v)} placeholder="0" />
       </div>
 
       <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <Toggle label="ตอบกลับตัวเอง (chain replies)"
+        <Toggle label="ตอบกลับตัวเอง (ต่อคอมเมนต์เป็นลูกโซ่)"
                 checked={!!draft.enable_self_reply}
                 onChange={v => set('enable_self_reply', v)} />
-        <Toggle label="ปักหมุดคอมเม้นบนสุด"
+        <Toggle label="ปักหมุดคอมเมนต์บนสุด"
                 checked={!!draft.enable_pin}
                 onChange={v => set('enable_pin', v)} />
-        <Toggle label="ตรวจจับเมื่อ FB ลบคอมเม้น (แล้วแจ้งเตือน)"
+        <Toggle label="ตรวจจับเมื่อเฟซบุ๊กลบคอมเมนต์ (แล้วแจ้งเตือน)"
                 checked={!!draft.detect_removal}
                 onChange={v => set('detect_removal', v)} />
       </div>
@@ -324,7 +326,7 @@ function TemplateModal({ pages, template, defaultPageId, onClose, onSaved, showT
         })
       }).then(r => r.json());
       setPreview(typeof data === 'string' ? data : (data.preview || data.content || JSON.stringify(data)));
-    } catch (e) { showToast?.('preview ไม่สำเร็จ', e.message, 'error'); }
+    } catch (e) { showToast?.('แสดงตัวอย่างไม่สำเร็จ', e.message, 'error'); }
     finally { setPreviewLoading(false); }
   };
 
@@ -372,7 +374,7 @@ function TemplateModal({ pages, template, defaultPageId, onClose, onSaved, showT
         <div style={{ display: 'flex', justifyContent: 'space-between',
                       alignItems: 'center', marginBottom: 14 }}>
           <div style={{ fontSize: 16, fontWeight: 500 }}>
-            {template ? 'แก้ข้อความคอมเม้น' : 'เพิ่มข้อความคอมเม้น'}
+            {template ? 'แก้ข้อความคอมเมนต์' : 'เพิ่มข้อความคอมเมนต์'}
           </div>
           <button className="btn-ghost" onClick={onClose}
                   style={{ fontSize: 14, padding: '2px 10px' }}>✕</button>
@@ -383,7 +385,7 @@ function TemplateModal({ pages, template, defaultPageId, onClose, onSaved, showT
           <div>
             <label style={{ fontSize: 11 }}>ชื่อย่อ (ทางเลือก)</label>
             <input value={form.label} onChange={e => set('label', e.target.value)}
-                   placeholder="เช่น greeting"
+                   placeholder="เช่น คำทักทาย"
                    style={{ width: '100%', fontSize: 12, padding: '5px 8px',
                             background: 'var(--surface-2)',
                             border: '0.5px solid var(--border-faint)',
@@ -406,7 +408,7 @@ function TemplateModal({ pages, template, defaultPageId, onClose, onSaved, showT
         <label style={{ fontSize: 11 }}>ข้อความ</label>
         <textarea value={form.content} onChange={e => set('content', e.target.value)}
                   rows={5}
-                  placeholder="คอมเม้นแบบไหน? ใช้ตัวแปร {video_title} {page_name} {clip_number}"
+                  placeholder="คอมเมนต์แบบไหน? ใช้ตัวแปร {video_title} {page_name} {clip_number}"
                   style={{ width: '100%', fontSize: 12, padding: '6px 8px',
                            background: 'var(--surface-2)',
                            border: '0.5px solid var(--border-faint)',

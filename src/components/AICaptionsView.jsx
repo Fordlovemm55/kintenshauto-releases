@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import Icon from './Icon';
 
 const API = 'http://localhost:3003';
 
@@ -26,7 +27,7 @@ export default function AICaptionsView({ showToast }) {
   useEffect(() => { refresh(); }, [refresh]);
 
   const deletePrompt = async (id) => {
-    if (!confirm('ลบ prompt นี้?')) return;
+    if (!confirm('ลบพรอมต์นี้?')) return;
     try {
       await fetch(`${API}/api/caption-prompts/${id}`, { method: 'DELETE' });
       showToast?.('ลบแล้ว', '', 'info');
@@ -49,10 +50,10 @@ export default function AICaptionsView({ showToast }) {
           background: 'rgba(232,123,123,0.06)'
         }}>
           <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>
-            ⚠ ยังไม่ได้ตั้ง API Key
+            ⚠ ยังไม่ได้ตั้งคีย์ API
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-            ต้องไปตั้ง API Key (OpenAI / Anthropic / Gemini) ที่หน้า "ตั้งค่า" ก่อน
+            ต้องไปตั้งคีย์ API (โอเพนเอไอ / แอนโทรปิก / เจมิไน) ที่หน้า "ตั้งค่า" ก่อน
             แล้วถึงจะใช้ AI สร้างแคปชั่นได้
           </div>
         </div>
@@ -62,10 +63,10 @@ export default function AICaptionsView({ showToast }) {
       <div className="panel">
         <div className="panel-header">
           <div>
-            <div className="label-jp">価格 · MODELS</div>
+            <div className="label-jp">ราคา</div>
             <div className="panel-title">รุ่น AI ที่ใช้ได้ + ราคาประมาณ</div>
             <div className="panel-subtitle">
-              ราคาต่อแคปชั่น 1 ตัว (≈ 250 input tokens + 80 output tokens) — ใช้เลือกใน prompt ด้านล่าง
+              ราคาต่อแคปชั่น 1 ตัว (≈ โทเคนเข้า 250 + โทเคนออก 80) — ใช้เลือกในพรอมต์ด้านล่าง
             </div>
           </div>
         </div>
@@ -82,7 +83,7 @@ export default function AICaptionsView({ showToast }) {
               }}>
                 <div style={{ fontSize: 12, fontWeight: 500 }}>{m.label}</div>
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-                  {m.provider} · {m.available ? '✓ ใช้ได้' : '× ยังไม่ได้ตั้ง key'}
+                  {m.provider} · {m.available ? '✓ ใช้ได้' : '× ยังไม่ได้ตั้งคีย์'}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--gold)', marginTop: 4 }}>
                   ≈ {m.cost_per_caption_thb?.toFixed?.(4) || '?'} บาท/แคปชั่น
@@ -100,21 +101,22 @@ export default function AICaptionsView({ showToast }) {
       <div className="panel">
         <div className="panel-header">
           <div>
-            <div className="label-jp">知恵 · PROMPTS</div>
-            <div className="panel-title">Prompt สำหรับสร้างแคปชั่น ({prompts.length})</div>
+            <div className="label-jp">พรอมต์</div>
+            <div className="panel-title">พรอมต์สำหรับสร้างแคปชั่น ({prompts.length})</div>
             <div className="panel-subtitle">
-              กำหนดสไตล์การเขียนแคปชั่น — แต่ละเพจมี prompt ของตัวเอง หรือใช้ prompt ทั่วไป (page_id ว่าง)
+              กำหนดสไตล์การเขียนแคปชั่น — แต่ละเพจมีพรอมต์ของตัวเอง หรือใช้พรอมต์ทั่วไป (ไม่ระบุเพจ)
             </div>
           </div>
           <button className="btn-primary" onClick={() => setShowCreate(true)}
                   style={{ fontSize: 12, padding: '6px 14px' }}>
-            ＋ สร้าง Prompt
+            ＋ สร้างพรอมต์
           </button>
         </div>
 
         {prompts.length === 0 ? (
           <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-muted)' }}>
-            <div style={{ fontSize: 13 }}>ยังไม่มี prompt — กด "＋ สร้าง Prompt" เพื่อเริ่ม</div>
+            <Icon name="empty-comments" className="empty-icon" size={56} />
+            <div style={{ fontSize: 13 }}>ยังไม่มีพรอมต์ — กด "＋ สร้างพรอมต์" เพื่อเริ่ม</div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -171,11 +173,11 @@ function PromptRow({ prompt, pages, models, onEdit, onDelete }) {
               </span>
             )}
             <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-              max {prompt.max_tokens} tokens · T={prompt.temperature}
+              สูงสุด {prompt.max_tokens} โทเคน · อุณหภูมิ={prompt.temperature}
             </span>
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
-            <strong>System:</strong>
+            <strong>พรอมต์ระบบ:</strong>
           </div>
           <div style={{
             fontSize: 11, color: 'var(--text-secondary)',
@@ -186,7 +188,7 @@ function PromptRow({ prompt, pages, models, onEdit, onDelete }) {
             {prompt.system_prompt}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
-            <strong>User template:</strong>
+            <strong>แม่แบบพรอมต์ผู้ใช้:</strong>
           </div>
           <div style={{
             fontSize: 11, color: 'var(--text-secondary)',
@@ -208,7 +210,7 @@ function PromptRow({ prompt, pages, models, onEdit, onDelete }) {
   );
 }
 
-const DEFAULT_SYSTEM = `คุณเป็นผู้เขียนแคปชั่น Facebook Reel ภาษาไทยที่สั้น กระชับ ดึงดูดให้คนคลิกดู
+const DEFAULT_SYSTEM = `คุณเป็นผู้เขียนแคปชั่นเฟซบุ๊กรีลภาษาไทยที่สั้น กระชับ ดึงดูดให้คนคลิกดู
 - 1-2 บรรทัด ไม่ยาว
 - ใส่ #hashtag 2-3 ตัวที่เกี่ยวข้อง
 - ไม่ใช้คำหยาบ ไม่สแปม`;
@@ -247,7 +249,7 @@ function PromptModal({ pages, models, prompt, onClose, onSaved, showToast }) {
           temperature: Number(form.temperature) || 0.8,
           variables: {
             video_title: 'หงส์เหิรฟ้า EP.1',
-            niche: 'ซีรีย์จีนย้อนยุค',
+            niche: 'ซีรีส์จีนย้อนยุค',
             clip_number: 1, total_clips: 4,
             page_name: form.page_id
               ? pages.find(p => p.id === form.page_id)?.name || 'เพจตัวอย่าง'
@@ -264,7 +266,7 @@ function PromptModal({ pages, models, prompt, onClose, onSaved, showToast }) {
 
   const save = async () => {
     if (!form.system_prompt.trim() || !form.user_prompt.trim()) {
-      showToast?.('ใส่ทั้งสอง prompt', 'system + user prompt ต้องไม่ว่าง', 'error');
+      showToast?.('ใส่พรอมต์ให้ครบทั้งสอง', 'พรอมต์ระบบและพรอมต์ผู้ใช้ต้องไม่ว่าง', 'error');
       return;
     }
     setSaving(true);
@@ -308,7 +310,7 @@ function PromptModal({ pages, models, prompt, onClose, onSaved, showToast }) {
         <div style={{ display: 'flex', justifyContent: 'space-between',
                       alignItems: 'center', marginBottom: 14 }}>
           <div style={{ fontSize: 16, fontWeight: 500 }}>
-            {isEdit ? 'แก้ Prompt' : 'สร้าง Prompt ใหม่'}
+            {isEdit ? 'แก้พรอมต์' : 'สร้างพรอมต์ใหม่'}
           </div>
           <button className="btn-ghost" onClick={onClose}
                   style={{ fontSize: 14, padding: '2px 10px' }}>✕</button>
@@ -336,7 +338,7 @@ function PromptModal({ pages, models, prompt, onClose, onSaved, showToast }) {
                              background: 'var(--surface-2)',
                              border: '0.5px solid var(--border-faint)',
                              color: 'var(--text-primary)', marginTop: 2 }}>
-              <option value="">— ใช้รุ่นที่ตั้งไว้ใน API Key —</option>
+              <option value="">— ใช้รุ่นที่ตั้งไว้ในคีย์ API —</option>
               {models.filter(m => m.available).map(m => (
                 <option key={m.id} value={m.id}>{m.label} (~{m.cost_per_caption_thb?.toFixed?.(4) || '?'} ฿)</option>
               ))}
@@ -344,7 +346,7 @@ function PromptModal({ pages, models, prompt, onClose, onSaved, showToast }) {
           </div>
         </div>
 
-        <label style={{ fontSize: 11 }}>System Prompt (คำสั่งหลัก)</label>
+        <label style={{ fontSize: 11 }}>พรอมต์ระบบ (คำสั่งหลัก)</label>
         <textarea value={form.system_prompt}
                   onChange={e => set('system_prompt', e.target.value)}
                   rows={4}
@@ -355,7 +357,7 @@ function PromptModal({ pages, models, prompt, onClose, onSaved, showToast }) {
                            resize: 'vertical' }} />
 
         <label style={{ fontSize: 11, marginTop: 10, display: 'block' }}>
-          User Prompt (ข้อความที่ส่งให้ AI · ใช้ตัวแปร {`{video_title}`}, {`{page_name}`} ฯลฯ)
+          พรอมต์ผู้ใช้ (ข้อความที่ส่งให้ AI · ใช้ตัวแปร {`{video_title}`}, {`{page_name}`} ฯลฯ)
         </label>
         <textarea value={form.user_prompt}
                   onChange={e => set('user_prompt', e.target.value)}
@@ -369,7 +371,7 @@ function PromptModal({ pages, models, prompt, onClose, onSaved, showToast }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
                       gap: 10, marginTop: 10 }}>
           <div>
-            <label style={{ fontSize: 11 }}>Max tokens</label>
+            <label style={{ fontSize: 11 }}>โทเคนสูงสุด</label>
             <input type="number" min="50" max="2000" value={form.max_tokens}
                    onChange={e => set('max_tokens', e.target.value)}
                    style={{ width: '100%', fontSize: 12, padding: '5px 8px',
@@ -378,7 +380,7 @@ function PromptModal({ pages, models, prompt, onClose, onSaved, showToast }) {
                             color: 'var(--text-primary)', marginTop: 2 }} />
           </div>
           <div>
-            <label style={{ fontSize: 11 }}>Temperature (0–1)</label>
+            <label style={{ fontSize: 11 }}>อุณหภูมิ (0–1)</label>
             <input type="number" min="0" max="1" step="0.1" value={form.temperature}
                    onChange={e => set('temperature', e.target.value)}
                    style={{ width: '100%', fontSize: 12, padding: '5px 8px',
@@ -389,7 +391,7 @@ function PromptModal({ pages, models, prompt, onClose, onSaved, showToast }) {
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
             <button className="btn-ghost" onClick={test} disabled={testing}
                     style={{ fontSize: 11, padding: '5px 14px', width: '100%' }}>
-              {testing ? '⏳ ทดสอบ...' : '🧪 ทดสอบ Prompt'}
+              {testing ? '⏳ ทดสอบ...' : '🧪 ทดสอบพรอมต์'}
             </button>
           </div>
         </div>

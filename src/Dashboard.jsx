@@ -5,6 +5,7 @@ import SettingsView from './components/SettingsView';
 import ReviewsView from './components/ReviewsView';
 import BannersView from './components/BannersView';
 import LocalClipsView from './components/LocalClipsView';
+import Icon, { LogoMark } from './components/Icon';
 import CommentsView from './components/CommentsView';
 import AICaptionsView from './components/AICaptionsView';
 
@@ -19,7 +20,7 @@ const NAV_SECTIONS = [
       { key: 'home',     icon: 'icon-home',    th: 'หน้าหลัก' },
       { key: 'queue',    icon: 'icon-queue',   th: 'คิวงาน' },
       { key: 'reviews',  icon: 'icon-reviews', th: 'ตรวจสอบ', alertKey: 'pending_reviews' },
-      { key: 'localclips', icon: 'icon-queue', th: 'เพิ่มคลิปเอง' }
+      { key: 'localclips', icon: 'icon-localclips', th: 'เพิ่มคลิปเอง' }
     ]
   },
   {
@@ -169,8 +170,7 @@ export default function Dashboard({ user }) {
                   onClick={() => setSidebarOpen(o => !o)}>
             {sidebarOpen ? '✕' : '☰'}
           </button>
-          <img src="./assets/ui/crest.png" alt="" width={38} height={38}
-               style={{ objectFit: 'cover', borderRadius: '22%' }} />
+          <LogoMark size={38} radius={11} />
           <div>
             <div className="brand-wordmark" style={{ fontSize: 20, lineHeight: 1.15 }}>ออโต้โพสต์ดีว๊ะ</div>
             <div style={{ fontSize: 11, color: 'var(--gold)', letterSpacing: 0.5 }}>เครื่องมือโพสต์รีลอัตโนมัติ · เวอร์ชัน {version}</div>
@@ -208,7 +208,7 @@ export default function Dashboard({ user }) {
                 aria-current={nav === item.key ? 'page' : undefined}
                 style={{ width: '100%', textAlign: 'left' }}
               >
-                <img className="icon" src={`./assets/ui/${item.icon}.png`} alt="" aria-hidden="true" />
+                <Icon name={item.icon} className="icon" size={20} />
                 <span style={{ flex: 1 }}>{item.th}</span>
                 {item.alertKey && stats[item.alertKey] > 0 && (
                   <span className="badge badge-danger" aria-label={`${stats[item.alertKey]} รายการแจ้งเตือน`}
@@ -344,7 +344,7 @@ function HomeView({ stats, pages, recentJobs, digest, selectedPage, setSelectedP
 
         {pages.length === 0 ? (
           <div style={{ padding: 24, textAlign: 'center', background: 'var(--surface-2)', border: '0.5px dashed var(--border-soft)' }}>
-            <img className="empty-illustration" src="./assets/ui/empty-generic.png" alt="" style={{ width: 120 }} />
+            <Icon name="empty-generic" className="empty-icon" size={56} />
             <div style={{ fontSize: 14, marginBottom: 8 }}>ยังไม่มีเพจ</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               ไปเมนู "จัดการบัญชี" เพื่อเพิ่มบัญชีและเพจก่อน
@@ -380,7 +380,7 @@ function HomeView({ stats, pages, recentJobs, digest, selectedPage, setSelectedP
         </div>
         {recentJobs.length === 0 ? (
           <div style={{ padding: 20, color: 'var(--text-muted)', textAlign: 'center', fontSize: 13 }}>
-            <img className="empty-illustration" src="./assets/ui/empty-generic.png" alt="" style={{ width: 120 }} />
+            <Icon name="empty-generic" className="empty-icon" size={56} />
             ยังไม่มีกิจกรรม
           </div>
         ) : (
@@ -423,7 +423,7 @@ function ChannelWatcherDigest({ channels, goToWatcher }) {
       </div>
       {channels.length === 0 ? (
         <div style={{ padding: 20, color: 'var(--text-muted)', textAlign: 'center', fontSize: 13 }}>
-          <img className="empty-illustration" src="./assets/ui/empty-watcher.png" alt="" style={{ width: 130 }} />
+          <Icon name="empty-watcher" className="empty-icon" size={60} />
           ไม่มีคลิปใหม่รออนุมัติ
         </div>
       ) : (
