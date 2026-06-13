@@ -268,11 +268,13 @@
       activateMyView();
     });
 
-    // หาตำแหน่งวาง — หลัง nav-item ตัวสุดท้าย ก่อน nav-section ถัดไป (ถ้ามี)
-    const navItems = sidebar.querySelectorAll('.nav-item:not(.watcher-nav-injected)');
-    if (navItems.length > 0) {
-      const last = navItems[navItems.length - 1];
-      last.parentNode.insertBefore(myNavItem, last.nextSibling);
+    // วางไว้แถวบน — หลัง "เพิ่มคลิปเอง" (กลุ่มใช้ประจำ) ; fallback เป็นหลังตรวจสอบ แล้วค่อยท้ายสุด
+    const navItems = Array.from(sidebar.querySelectorAll('.nav-item:not(.watcher-nav-injected)'));
+    const anchor = navItems.find(n => (n.textContent || '').includes('เพิ่มคลิปเอง'))
+      || navItems.find(n => (n.textContent || '').includes('ตรวจสอบ'))
+      || (navItems.length ? navItems[navItems.length - 1] : null);
+    if (anchor) {
+      anchor.parentNode.insertBefore(myNavItem, anchor.nextSibling);
     } else {
       sidebar.appendChild(myNavItem);
     }
