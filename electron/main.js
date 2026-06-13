@@ -229,8 +229,8 @@ function createMainWindow() {
         minHeight: 480,
         show: false,
         icon: fs.existsSync(iconPath) ? iconPath : undefined,
-        backgroundColor: '#0a0a0d',
-        title: `KINTENSHAUTO · 剣天照 · v${app.getVersion()}`,
+        backgroundColor: '#0f172a',
+        title: `ออโต้โพสต์ดีว๊ะ · v${app.getVersion()}`,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -369,7 +369,7 @@ function createTray() {
         logError('tray init failed: ' + e.message);
         return;
     }
-    tray.setToolTip('KINTENSHAUTO · 剣天照');
+    tray.setToolTip('ออโต้โพสต์ดีว๊ะ');
 
     const showWindow = () => {
         if (!mainWindow || mainWindow.isDestroyed()) {

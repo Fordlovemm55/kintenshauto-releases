@@ -2,98 +2,78 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>KINTENSHAUTO</title>
+<title>ออโต้โพสต์ดีว๊ะ</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500&family=Noto+Serif+JP:wght@500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500&family=IBM+Plex+Sans+Thai:wght@500;600;700&display=swap');
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
   width: 100%; height: 100%; overflow: hidden;
   background: transparent;
-  font-family: "Sarabun", "Noto Serif JP", sans-serif;
+  font-family: "Sarabun", "IBM Plex Sans Thai", sans-serif;
   -webkit-user-select: none;
   -webkit-app-region: drag;
 }
 .container {
   width: 100%; height: 100%;
-  background: radial-gradient(ellipse at center, #2a0a1a 0%, #0a0a0d 100%);
-  border: 1px solid rgba(212,175,55,0.3);
-  border-radius: 12px;
+  background: radial-gradient(700px 420px at 50% -20%, rgba(99,102,241,0.18), transparent 60%), #0f172a;
+  border: 1px solid rgba(99,102,241,0.3);
+  border-radius: 18px;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   position: relative; overflow: hidden;
 }
 .kanji {
-  font-family: "Noto Serif JP", serif;
-  font-size: 96px; font-weight: 700;
-  color: #d4af37;
-  letter-spacing: 4px;
-  line-height: 1;
-  margin-bottom: 12px;
-  text-shadow: 0 0 24px rgba(212,175,55,0.4);
-  animation: glow 2s ease-in-out infinite;
+  font-family: "IBM Plex Sans Thai", "Sarabun", sans-serif;
+  font-size: 34px; font-weight: 700;
+  color: #818cf8;
+  letter-spacing: 0;
+  line-height: 1.1;
+  margin-bottom: 10px;
+  animation: glow 2.4s ease-in-out infinite;
 }
 @keyframes glow {
-  0%,100% { text-shadow: 0 0 24px rgba(212,175,55,0.4); }
-  50% { text-shadow: 0 0 40px rgba(212,175,55,0.7); }
+  0%,100% { text-shadow: 0 4px 18px rgba(99,102,241,0.35); }
+  50% { text-shadow: 0 6px 28px rgba(99,102,241,0.6); }
 }
 .title {
-  font-size: 18px; font-weight: 500;
-  color: #f4e8d0; letter-spacing: 3px;
+  font-size: 16px; font-weight: 600;
+  color: #e2e8f0; letter-spacing: 0;
   margin-bottom: 4px;
 }
 .subtitle {
-  font-size: 12px; color: #8b7355;
-  letter-spacing: 2px;
+  font-size: 12px; color: #94a3b8;
+  letter-spacing: 0;
 }
 .loader {
   position: absolute; bottom: 40px;
-  width: 280px; height: 2px;
-  background: rgba(212,175,55,0.15);
+  width: 280px; height: 4px;
+  background: rgba(148,163,184,0.18);
+  border-radius: 999px;
   overflow: hidden;
 }
 .loader::before {
   content: '';
   position: absolute; top: 0; left: -30%;
   width: 30%; height: 100%;
-  background: linear-gradient(90deg, transparent, #d4af37, transparent);
+  background: linear-gradient(90deg, transparent, #6366f1, #818cf8, transparent);
   animation: slide 1.5s ease-in-out infinite;
 }
 @keyframes slide { to { left: 130%; } }
 .status {
   position: absolute; bottom: 20px;
-  font-size: 11px; color: #8b7355;
+  font-size: 11px; color: #64748b;
   letter-spacing: 1px;
-}
-.petal {
-  position: absolute; top: -10px;
-  width: 8px; height: 5px;
-  background: #ffb7c5;
-  border-radius: 50% 0 50% 0;
-  opacity: 0.7;
-  animation: fall linear infinite;
-}
-@keyframes fall {
-  0% { transform: translate(0,0) rotate(0deg); opacity: 0; }
-  10% { opacity: 0.7; }
-  90% { opacity: 0.7; }
-  100% { transform: translate(var(--drift,30px), 320px) rotate(360deg); opacity: 0; }
 }
 </style>
 </head>
 <body>
 <div class="container">
-  <div class="kanji">剣天照</div>
-  <div class="title">KINTENSHAUTO</div>
-  <div class="subtitle">กำลังเตรียมระบบ · 起動中</div>
+  <div class="kanji">ออโต้โพสต์ดีว๊ะ</div>
+  <div class="title">โพสต์คลิปอัตโนมัติ สไตล์ดีว๊ะ</div>
+  <div class="subtitle">กำลังเตรียมระบบ</div>
   <div class="loader"></div>
   <div class="status" id="app-version"></div>
-
-  <div class="petal" style="left:10%; animation-duration:6s; --drift:20px;"></div>
-  <div class="petal" style="left:25%; animation-duration:8s; animation-delay:1s; --drift:-15px;"></div>
-  <div class="petal" style="left:45%; animation-duration:7s; animation-delay:2s; --drift:25px;"></div>
-  <div class="petal" style="left:65%; animation-duration:9s; animation-delay:0.5s; --drift:-20px;"></div>
-  <div class="petal" style="left:85%; animation-duration:6.5s; animation-delay:1.5s; --drift:18px;"></div>
 </div>
 </body>
 </html>
