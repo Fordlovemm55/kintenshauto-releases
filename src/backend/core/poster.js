@@ -2859,7 +2859,7 @@ async function fetchManagedPages(browser, onLog) {
                 if (!name || name.length < 2 || name.length > 100) return;
                 const key = pageId || href;
                 if (seen.has(key)) return;
-                if (/^(home|menu|search|profile|settings|help|notifications|marketplace|watch|groups|memories|hide|manage|see all|more|bookmarks|facebook|meta|ก่อตั้งเพจ|สร้างเพจ|followed pages|คำเชิญ|สำรวจ|เพจที่คุณจัดการ|page notifications|messages|ข้อความ)$/i.test(name.toLowerCase().trim())) return;
+                if (/^(home|menu|search|profile|settings|help|notifications|marketplace|watch|groups|memories|hide|manage|see all|more|bookmarks|facebook|meta|ก่อตั้งเพจ|สร้างเพจ|followed pages|คำเชิญ|สำรวจ|เพจที่คุณจัดการ|page notifications|messages|ข้อความ|สร้างโพสต์|สร้าง|โพสต์|สร้างเพจใหม่|สร้างรีล|สร้างสตอรี่|โปรโมต|โปรโมทโพสต์|ดูเพจ|ดูโปรไฟล์|จัดการเพจ|เครื่องมือ|เครื่องมือมืออาชีพ|สถิติ|ข้อมูลเชิงลึก|โฆษณา|ศูนย์โฆษณา|ตัวจัดการโฆษณา|ไลฟ์|ไลฟ์สด|กิจกรรม|รูปภาพ|วิดีโอ|แชร์|ถูกใจ|ติดตาม|เลิกติดตาม|ความช่วยเหลือ|การตั้งค่า|ดูทั้งหมด|เพิ่มเติม|create post|create reel|create story|promote|promote post|insights|ad center|ads manager|create|edit page|view page|view profile|page tools|see more|professional dashboard|meta business suite)$/i.test(name.toLowerCase().trim())) return;
                 seen.add(key);
                 results.push({ name, fb_page_id: pageId || href.replace(/^\//, '').split(/[?#/]/)[0], href, strategy });
             }

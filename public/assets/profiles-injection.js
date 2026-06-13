@@ -578,7 +578,13 @@
         const pagesList = el('div', { class: 'pages-list' });
         pagesList.appendChild(el('div', { class: 'pages-label' }, 'เพจในบัญชีนี้ (' + pagesForProfile.length + '):'));
         for (const pg of pagesForProfile) {
-          pagesList.appendChild(el('span', { class: 'page-pill' }, pg.name));
+          pagesList.appendChild(el('span', { class: 'page-pill' }, pg.name,
+            el('button', {
+              class: 'page-del',
+              title: 'ลบเพจนี้',
+              style: 'margin-left:6px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;padding:0 2px;font-size:11px;line-height:1;',
+              onclick: () => onDeletePage(pg)
+            }, '✕')));
         }
         card.appendChild(pagesList);
       }
@@ -696,6 +702,17 @@
       refresh();
     } catch (e) {
       showToast('ดึงเพจล้มเหลว', e.message, 'danger');
+    }
+  }
+
+  async function onDeletePage(pg) {
+    if (!confirm('ลบเพจ "' + pg.name + '" ออกจากบัญชีนี้?')) return;
+    try {
+      await api('/api/pages/' + pg.id, { method: 'DELETE' });
+      showToast('ลบเพจแล้ว', pg.name, 'info');
+      refresh();
+    } catch (e) {
+      showToast('ลบเพจไม่สำเร็จ', e.message, 'danger');
     }
   }
 
