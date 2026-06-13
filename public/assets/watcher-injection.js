@@ -19,9 +19,9 @@
     window.__KINTENSHAUTO_API__
   )) || 'http://localhost:3003';
   const NAV_KEY = 'watcher';
-  const NAV_ICON = '👁';
+  // ไอคอนเมนูแบบรูป (ไทล์ 3D สีเต็มใบ — มุมโค้ง) ให้เข้ากับ sidebar ฝั่ง React
+  const NAV_ICON = '<svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
   const NAV_TH = 'ตามช่องอัตโนมัติ';
-  const NAV_JP = '見張り';
 
   let myNavItem = null;
   let overlay = null;
@@ -182,13 +182,13 @@
       'box-shadow:0 24px 48px rgba(0,0,0,0.6);padding:28px 32px;color:var(--text-primary);font-size:14px';
     const titleRow = document.createElement('div');
     titleRow.innerHTML =
-      '<div style="font-size:11px;letter-spacing:4px;color:var(--gold);margin-bottom:6px">認証 · YOUTUBE LOGIN</div>' +
-      '<div style="font-size:20px;font-weight:600;margin-bottom:12px">ต้อง login YouTube ก่อนดาวน์โหลด</div>' +
-      '<div style="font-size:13px;line-height:1.6;color:var(--text-muted);margin-bottom:8px">YouTube แจ้งว่า "Sign in to confirm you\'re not a bot" สำหรับ ' + items.length + ' คลิป<br>วิธีแก้:</div>' +
+      '<div style="font-size:11px;letter-spacing:4px;color:var(--gold);margin-bottom:6px">เข้าสู่ระบบยูทูบ</div>' +
+      '<div style="font-size:20px;font-weight:600;margin-bottom:12px">ต้องเข้าสู่ระบบยูทูบก่อนดาวน์โหลด</div>' +
+      '<div style="font-size:13px;line-height:1.6;color:var(--text-muted);margin-bottom:8px">ยูทูบขอให้ยืนยันว่าไม่ใช่บอท สำหรับ ' + items.length + ' คลิป<br>วิธีแก้:</div>' +
       '<ol style="font-size:13px;line-height:1.8;margin:0 0 18px 22px;color:var(--text-primary)">' +
-        '<li>กดปุ่ม "🌐 เปิด YouTube" ด้านล่าง</li>' +
-        '<li>Login บัญชี YouTube ของคุณใน Chrome</li>' +
-        '<li>กลับมาที่นี่แล้วกด "✓ ฉัน login แล้ว — ลองใหม่"</li>' +
+        '<li>กดปุ่ม "🌐 เปิดยูทูบ" ด้านล่าง</li>' +
+        '<li>เข้าสู่ระบบบัญชียูทูบของคุณในโครม</li>' +
+        '<li>กลับมาที่นี่แล้วกด "✓ เข้าสู่ระบบแล้ว — ลองใหม่"</li>' +
       '</ol>';
     card.appendChild(titleRow);
 
@@ -205,7 +205,7 @@
 
     const openBtn = document.createElement('button');
     openBtn.className = 'btn-ghost';
-    openBtn.textContent = '🌐 เปิด YouTube';
+    openBtn.textContent = '🌐 เปิดยูทูบ';
     openBtn.onclick = () => {
       try { window.kintenshauto?.openExternal?.('https://www.youtube.com/'); }
       catch (e) { console.warn('openExternal failed', e); }
@@ -213,7 +213,7 @@
 
     const retryBtn = document.createElement('button');
     retryBtn.className = 'btn-primary';
-    retryBtn.textContent = '✓ ฉัน login แล้ว — ลองใหม่';
+    retryBtn.textContent = '✓ เข้าสู่ระบบแล้ว — ลองใหม่';
     retryBtn.onclick = async () => {
       retryBtn.disabled = true;
       retryBtn.textContent = '⏳ กำลังลองใหม่...';
@@ -225,7 +225,7 @@
       } catch (e) {
         showToast('ลองใหม่ไม่สำเร็จ', e.message || 'ติดปัญหา', 'danger');
         retryBtn.disabled = false;
-        retryBtn.textContent = '✓ ฉัน login แล้ว — ลองใหม่';
+        retryBtn.textContent = '✓ เข้าสู่ระบบแล้ว — ลองใหม่';
       }
     };
 
@@ -259,7 +259,7 @@
     myNavItem.className = 'nav-item watcher-nav-injected' + (myActive ? ' active' : '');
     myNavItem.dataset.watcherInject = '1';
     myNavItem.innerHTML =
-      '<span class="icon">' + NAV_ICON + '</span>' +
+      NAV_ICON +
       '<span style="flex:1">' + NAV_TH + '</span>' +
       '<span class="watcher-badge" style="display:none;font-size:10px;padding:1px 7px;border-radius:10px;background:rgba(232,123,123,.15);border:1px solid var(--danger);color:var(--danger);"></span>';
 
@@ -438,7 +438,7 @@
     // → ครอบเต็มพื้นที่ main ตลอดเวลา (ไม่มี bleed-through)
     overlay.style.cssText =
       'position:fixed;z-index:100;' +
-      'background:var(--sumi-ink, #0a0a0d);' +
+      'background:radial-gradient(900px 520px at 50% -10%,rgba(99,102,241,0.10),transparent 60%),#0f172a;' +
       'overflow-y:auto;padding:32px 40px;display:none;' +
       'box-shadow:inset 0 0 60px rgba(0,0,0,.5)';
     document.body.appendChild(overlay);
@@ -602,15 +602,15 @@
   }
 
   const PLATFORM_LABEL = {
-    youtube: 'YouTube', bilibili: 'Bilibili', tiktok: 'TikTok',
-    facebook: 'Facebook', other: 'อื่นๆ'
+    youtube: 'ยูทูบ', bilibili: 'บิลิบิลิ', tiktok: 'ติ๊กต็อก',
+    facebook: 'เฟซบุ๊ก', other: 'อื่นๆ'
   };
   const CONTENT_TYPE_OPTIONS = [
-    { value: 'all', label: 'ทุกคลิปทั่วไป (Videos)' },
-    { value: 'shorts', label: 'Shorts (YouTube)' },
-    { value: 'reels', label: 'Reels (Facebook / Shorts ของ YouTube)' },
+    { value: 'all', label: 'ทุกคลิปทั่วไป (วิดีโอ)' },
+    { value: 'shorts', label: 'ช็อตส์ (ยูทูบ)' },
+    { value: 'reels', label: 'รีล (เฟซบุ๊ก / ช็อตส์ของยูทูบ)' },
     { value: 'longform', label: 'คลิปยาว (>1 นาที)' },
-    { value: 'live', label: 'Live / Streams' }
+    { value: 'live', label: 'ไลฟ์ / สตรีม' }
   ];
   function detectPlatform(url) {
     const u = (url || '').toLowerCase();
@@ -679,7 +679,7 @@
     const summary = el('summary', { style: 'list-style:none;outline:none;cursor:pointer' });
     summary.appendChild(el('div', { class: 'panel-header', style: 'margin-bottom:0;padding-bottom:0;border:none' },
       el('div', {},
-        el('div', { class: 'label-jp' }, '言の葉 · WATCHER CAPTION'),
+        el('div', { class: 'label-jp' }, 'แคปชั่นช่อง'),
         el('div', { class: 'panel-title' }, '⚙ คำสั่ง AI สำหรับสร้างแคปชั่น'),
         el('div', { class: 'panel-subtitle' },
           'ใส่ครั้งเดียวใช้กับทุกเพจ · แยกจากแคปชั่นหลัก (เมนู "AI แคปชั่น") · คลิกเพื่อเปิด/ปิด')
@@ -700,23 +700,23 @@
         ' ชื่อคลิปต้นฉบับ'),
       el('div', {},
         el('code', { style: 'color:var(--gold);background:rgba(0,0,0,.3);padding:3px 8px;margin-right:6px;font-size:12px' }, '{channel_label}'),
-        ' ชื่อช่อง YouTube/TikTok ที่ตามดู'),
+        ' ชื่อช่องยูทูบ/ติ๊กต็อก ที่ตามดู'),
       el('div', {},
         el('code', { style: 'color:var(--gold);background:rgba(0,0,0,.3);padding:3px 8px;margin-right:6px;font-size:12px' }, '{page_name}'),
-        ' ชื่อเพจ FB ปลายทาง'),
+        ' ชื่อเพจเฟซบุ๊กปลายทาง'),
       el('div', {},
         el('code', { style: 'color:var(--gold);background:rgba(0,0,0,.3);padding:3px 8px;margin-right:6px;font-size:12px' }, '{niche}'),
-        ' niche ที่ตั้งให้เพจ (ถ้ามี)'),
+        ' แนวหมวดหมู่ที่ตั้งให้เพจ (ถ้ามี)'),
       el('div', {},
         el('code', { style: 'color:var(--gold);background:rgba(0,0,0,.3);padding:3px 8px;margin-right:6px;font-size:12px' }, '{source_url}'),
-        ' ลิงค์คลิปต้นฉบับ')
+        ' ลิงก์คลิปต้นฉบับ')
     ));
 
     // ─── ONE main textarea ───
     const usrTa = el('textarea', {
       rows: 8,
       placeholder:
-        'ตัวอย่าง:\n\nเขียนแคปชั่น Reel ภาษาไทยสั้นๆ 2-3 บรรทัด สำหรับคลิปชื่อ "{video_title}"\nให้ดึงดูดน่าคลิก ใช้อิโมจิ + แฮชแท็ก 3-5 อัน\nลงท้ายเชิญชวนให้กดติดตาม',
+        'ตัวอย่าง:\n\nเขียนแคปชั่นรีลภาษาไทยสั้นๆ 2-3 บรรทัด สำหรับคลิปชื่อ "{video_title}"\nให้ดึงดูดน่าคลิก ใช้อิโมจิ + แฮชแท็ก 3-5 อัน\nลงท้ายเชิญชวนให้กดติดตาม',
       style: 'min-height:200px;font-family:Sarabun, sans-serif;font-size:14px;line-height:1.7'
     });
     form.appendChild(el('div', {},
@@ -739,15 +739,15 @@
     const tokenInput = el('input', { type: 'number', min: '50', max: '1000', step: '10', value: '300', style: 'max-width:120px' });
 
     adv.appendChild(el('div', { style: 'margin-top:10px' },
-      el('label', { style: 'font-size:12px' }, 'System prompt (บทบาท AI — ใช้ค่าเริ่มต้นถ้าเว้นว่าง)'),
+      el('label', { style: 'font-size:12px' }, 'คำสั่งระบบ (บทบาท AI — ใช้ค่าเริ่มต้นถ้าเว้นว่าง)'),
       sysTa
     ));
     adv.appendChild(el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px' },
       el('div', {},
-        el('label', { style: 'font-size:12px' }, 'Temperature (ความสร้างสรรค์ 0.1-1.5)'),
+        el('label', { style: 'font-size:12px' }, 'ระดับความสร้างสรรค์ (0.1-1.5)'),
         tempInput),
       el('div', {},
-        el('label', { style: 'font-size:12px' }, 'Max tokens (ความยาวสูงสุด)'),
+        el('label', { style: 'font-size:12px' }, 'ความยาวสูงสุด (จำนวนคำ)'),
         tokenInput)
     ));
     form.appendChild(adv);
@@ -767,7 +767,7 @@
         tempInput.value = r.temperature || 0.85;
         tokenInput.value = r.max_tokens || 300;
         status.textContent = (r.user_prompt || '').trim()
-          ? '✓ ตั้งค่าแล้ว — ใช้กับทุกเพจที่ผ่าน Channel Watcher'
+          ? '✓ ตั้งค่าแล้ว — ใช้กับทุกเพจที่ผ่านการตามช่องอัตโนมัติ'
           : 'ℹ ยังไม่ตั้งค่า — จะใช้คำสั่งหลักของระบบแทน (เมนู "AI แคปชั่น")';
       } catch (e) { status.textContent = '✗ โหลดล้มเหลว: ' + e.message; }
     }
@@ -787,14 +787,14 @@
             max_tokens: parseInt(tokenInput.value, 10) || 300
           })
         });
-        status.textContent = '✓ บันทึกแล้ว · จะใช้กับ post ครั้งถัดไป';
-        showToast('บันทึกแล้ว', 'AI caption สำหรับ Channel Watcher', 'success');
+        status.textContent = '✓ บันทึกแล้ว · จะใช้กับโพสต์ครั้งถัดไป';
+        showToast('บันทึกแล้ว', 'แคปชั่น AI สำหรับการตามช่องอัตโนมัติ', 'success');
       } catch (e) { status.textContent = '✗ บันทึกไม่สำเร็จ: ' + e.message; }
       finally { saveBtn.disabled = false; }
     });
 
     clearBtn.addEventListener('click', async () => {
-      if (!confirm('ล้างคำสั่ง AI ของ Channel Watcher? — กลับไปใช้คำสั่งหลักของระบบ')) return;
+      if (!confirm('ล้างคำสั่ง AI ของการตามช่องอัตโนมัติ? — กลับไปใช้คำสั่งหลักของระบบ')) return;
       try {
         await api('/api/watcher/caption-prompt', {
           method: 'PUT',
@@ -833,7 +833,7 @@
       style: 'display:inline-flex;align-items:center;gap:8px;padding:6px 12px;' +
              'background:var(--surface-2);border-radius:6px;font-size:12px;cursor:pointer;' +
              'border:1px solid var(--border-soft)',
-      title: 'เปิด: ตัด+banner ปกติ · ปิด: โพสต์คลิปต้นฉบับโดยไม่ตัดต่อ'
+      title: 'เปิด: ตัด+ใส่แบนเนอร์ปกติ · ปิด: โพสต์คลิปต้นฉบับโดยไม่ตัดต่อ'
     });
     const cb = el('input', { type: 'checkbox' });
     cb.style.width = 'auto';
@@ -860,8 +860,8 @@
           body: JSON.stringify({ value: newVal })
         });
         showToast('ตั้งค่าแล้ว',
-          cb.checked ? 'ตัดต่ออัตโนมัติเปิดอยู่ — slice + banner ตามปกติ'
-                     : 'ตัดต่ออัตโนมัติปิด — โพสต์คลิปต้นฉบับเลย ไม่ตัด ไม่ใส่ banner',
+          cb.checked ? 'ตัดต่ออัตโนมัติเปิดอยู่ — ตัด + ใส่แบนเนอร์ตามปกติ'
+                     : 'ตัดต่ออัตโนมัติปิด — โพสต์คลิปต้นฉบับเลย ไม่ตัด ไม่ใส่แบนเนอร์',
           'success');
         refresh();
       } catch (e) {
@@ -880,10 +880,10 @@
     const panel = el('div', { class: 'panel fade-in' });
     panel.appendChild(el('div', { class: 'panel-header' },
       el('div', {},
-        el('div', { class: 'label-jp' }, '見張り · WATCHED CHANNELS'),
+        el('div', { class: 'label-jp' }, 'ช่องที่ตามดู'),
         el('div', { class: 'panel-title' }, 'ช่องที่บอทคอยตามดู'),
         el('div', { class: 'panel-subtitle' },
-          'บอทเช็คทุก N ชั่วโมงตามที่ตั้ง — เจอคลิปใหม่ → รอ Approve → ดาวน์โหลดเข้าโฟลเดอร์เฉพาะของช่องนั้น (กันคลิปปนเพจ)')
+          'บอทเช็คทุก N ชั่วโมงตามที่ตั้ง — เจอคลิปใหม่ → รออนุมัติ → ดาวน์โหลดเข้าโฟลเดอร์เฉพาะของช่องนั้น (กันคลิปปนเพจ)')
       ),
       el('div', { style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end' },
         renderAutoEditToggle(),
@@ -892,8 +892,8 @@
     ));
 
     if (state.channels.length === 0) {
-      panel.appendChild(emptyState('空', 'ยังไม่มีช่องที่ตามดู',
-        'กด "＋ เพิ่มช่อง" แล้วใส่ลิงก์ช่อง YouTube / TikTok / Bilibili / Facebook'));
+      panel.appendChild(emptyState('', 'ยังไม่มีช่องที่ตามดู',
+        'กด "＋ เพิ่มช่อง" แล้วใส่ลิงก์ช่องยูทูบ / ติ๊กต็อก / บิลิบิลิ / เฟซบุ๊ก'));
     } else {
       panel.appendChild(renderChannelTable());
     }
@@ -959,7 +959,7 @@
       const safeGroup = el('div', { style: 'display:inline-flex;gap:6px;align-items:center' },
         el('button', { class: 'btn-ghost watcher-act-btn', onclick: () => onCheckNow(ch.id) }, '🔍 เช็คเลย'),
         el('button', { class: 'btn-ghost watcher-act-btn',
-          title: 'reset baseline + ดึงคลิปล่าสุดทั้งหมดมา approve',
+          title: 'ล้างจุดเริ่มต้น + ดึงคลิปล่าสุดทั้งหมดมารออนุมัติ',
           onclick: () => onPullOld(ch) }, '📥 ดึงเก่า'),
         el('button', { class: 'btn-ghost watcher-act-btn', onclick: () => openEditModal(ch) }, '✎ แก้'),
         el('button', { class: 'btn-ghost watcher-act-btn',
@@ -1001,10 +1001,10 @@
 
     const header = el('div', { class: 'panel-header' },
       el('div', {},
-        el('div', { class: 'label-jp' }, '承認待ち · PENDING APPROVAL'),
+        el('div', { class: 'label-jp' }, 'รออนุมัติ'),
         titleNode,
         el('div', { class: 'panel-subtitle' },
-          'อนุมัติ → ดาวน์โหลดเต็ม + เตรียม clip & jobs ให้ pipeline | ปฏิเสธ → ข้ามถาวร')
+          'อนุมัติ → ดาวน์โหลดเต็ม + เตรียมคลิปและงานให้สายการผลิต | ปฏิเสธ → ข้ามถาวร')
       )
     );
     if (pendingOnly.length > 0) {
@@ -1022,7 +1022,7 @@
     panel.appendChild(header);
 
     if (state.pending.length === 0) {
-      panel.appendChild(emptyState('無し', 'ไม่มีคลิปใหม่', 'บอทจะแจ้งเมื่อเจอคลิปใหม่'));
+      panel.appendChild(emptyState('', 'ไม่มีคลิปใหม่', 'บอทจะแจ้งเมื่อเจอคลิปใหม่'));
     } else {
       // ✅ NEW: จัดกลุ่มตามช่อง — แต่ละ section มี header (ชื่อช่อง + เพจปลายทาง) + grid
       // เรียงกลุ่ม: pending มากสุด → น้อยสุด, ภายในกลุ่มเรียงตาม detected_at desc (เดิม)
@@ -1143,7 +1143,7 @@
     } else {
       card.appendChild(el('div', {
         style: 'width:100%;aspect-ratio:16/9;background:var(--surface-3);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:11px'
-      }, 'ไม่มี thumbnail'));
+      }, 'ไม่มีภาพปก'));
     }
 
     const body = el('div', { class: 'pc-body' });
@@ -1237,7 +1237,7 @@
       // แสดงข้อความสั้นๆ แทน error ดิบของ yt-dlp
       let errText = p.download_error || 'unknown error';
       if (/^\[NEEDS_YT_LOGIN\]/.test(errText)) {
-        errText = '🔐 ต้อง login YouTube ก่อน — กด "ตกลง" ในกล่องด้านบน หรือเปิดใหม่ที่ลิงก์';
+        errText = '🔐 ต้องเข้าสู่ระบบยูทูบก่อน — กด "ตกลง" ในกล่องด้านบน หรือเปิดใหม่ที่ลิงก์';
       }
       body.appendChild(el('div', {
         style: 'font-size:11px;color:var(--danger);margin-bottom:6px;padding:6px;background:rgba(232,123,123,.08);border-radius:2px;max-height:60px;overflow:auto'
@@ -1255,9 +1255,9 @@
     return card;
   }
 
-  function emptyState(jp, text, sub) {
+  function emptyState(_unused, text, sub) {
     return el('div', { style: 'padding:32px;text-align:center;color:var(--text-muted)' },
-      el('div', { class: 'kanji-title', style: 'font-size:36px;opacity:.5;margin-bottom:8px' }, jp),
+      el('img', { class: 'empty-illustration', src: './assets/ui/empty-watcher.png', alt: '' }),
       el('div', { style: 'font-size:13px' }, text),
       sub ? el('div', { style: 'font-size:11px;margin-top:6px' }, sub) : null
     );
@@ -1296,10 +1296,10 @@
 
     modal.appendChild(el('div', { class: 'panel-header' },
       el('div', {},
-        el('div', { class: 'label-jp' }, '過去取得'),
+        el('div', { class: 'label-jp' }, 'ดึงย้อนหลัง'),
         el('div', { class: 'panel-title' }, '📥 ดึงคลิปเก่าจาก: ' + ch.label),
         el('div', { class: 'panel-subtitle' },
-          'reset baseline → ดึงคลิป N ล่าสุดเข้ารายการรออนุมัติ (filter ตามประเภทที่ตั้งไว้)')
+          'ล้างจุดเริ่มต้น → ดึงคลิป N ล่าสุดเข้ารายการรออนุมัติ (กรองตามประเภทที่ตั้งไว้)')
       ),
       el('button', { class: 'btn-ghost', style: 'padding:4px 10px',
         onclick: () => backdrop.remove() }, '✕')
@@ -1317,7 +1317,7 @@
 
     // radio options
     const options = [
-      { v: '15',  label: '15 คลิป (default ปลอดภัย)' },
+      { v: '15',  label: '15 คลิป (ค่าเริ่มต้น ปลอดภัย)' },
       { v: '50',  label: '50 คลิป' },
       { v: '100', label: '100 คลิป' },
       { v: 'all', label: 'ทั้งหมด (อาจช้า ขึ้นกับขนาดช่อง)' },
@@ -1366,8 +1366,8 @@
     incRejBlock.appendChild(el('div', {},
       el('div', { style: 'font-weight:500;margin-bottom:2px' }, '🔄 รวมคลิปที่เคยปฏิเสธไปแล้ว'),
       el('div', { style: 'font-size:11px;color:var(--text-muted);line-height:1.5' },
-        'ถ้าติ๊ก: ระบบจะลบประวัติ "ปฏิเสธ" ของช่องนี้ → คลิปเก่าที่เคยกด ✗ จะกลับมาให้ approve ใหม่' +
-        '  ·  ถ้าไม่ติ๊ก: คลิปที่เคยปฏิเสธจะถูกข้ามถาวร (default — ปลอดภัย)')
+        'ถ้าติ๊ก: ระบบจะลบประวัติ "ปฏิเสธ" ของช่องนี้ → คลิปเก่าที่เคยกด ✗ จะกลับมาให้อนุมัติใหม่' +
+        '  ·  ถ้าไม่ติ๊ก: คลิปที่เคยปฏิเสธจะถูกข้ามถาวร (ค่าเริ่มต้น — ปลอดภัย)')
     ));
     modal.appendChild(incRejBlock);
 
@@ -1394,7 +1394,7 @@
           showToast('ดึงไม่สำเร็จ', r.error, 'danger');
         } else {
           showToast('ดึงคลิปแล้ว',
-            'เพิ่ม ' + (r.added || 0) + ' คลิป (ข้าม ' + (r.skipped || 0) + ' จาก filter)',
+            'เพิ่ม ' + (r.added || 0) + ' คลิป (ข้าม ' + (r.skipped || 0) + ' จากการกรอง)',
             (r.added || 0) > 0 ? 'success' : 'info');
         }
         refresh();
@@ -1460,8 +1460,8 @@
     const pendingOnly = state.pending.filter(p => p.status === 'pending');
     if (pendingOnly.length === 0) return;
     if (!confirm('ปฏิเสธทั้งหมด ' + pendingOnly.length + ' คลิป?\n\n' +
-                 '⚠ คลิปทั้งหมดจะถูกข้ามถาวร — บอทจะไม่นำกลับมาให้ approve อีก\n' +
-                 '(downloading/failed จะไม่ถูกแตะ)\n\n' +
+                 '⚠ คลิปทั้งหมดจะถูกข้ามถาวร — บอทจะไม่นำกลับมาให้อนุมัติอีก\n' +
+                 '(คลิปที่กำลังดาวน์โหลด/ล้มเหลว จะไม่ถูกแตะ)\n\n' +
                  'ยืนยัน?')) return;
     try {
       const r = await api('/api/watcher/pending/reject-all', { method: 'POST' });
@@ -1505,11 +1505,11 @@
 
     modal.appendChild(el('div', { class: 'panel-header' },
       el('div', {},
-        el('div', { class: 'label-jp' }, isEdit ? '編集' : '新規追加'),
+        el('div', { class: 'label-jp' }, isEdit ? 'แก้ไข' : 'เพิ่มใหม่'),
         el('div', { class: 'panel-title' }, isEdit ? 'แก้ไข: ' + initial.label : 'เพิ่มช่องใหม่'),
         el('div', { class: 'panel-subtitle' },
-          isEdit ? 'แก้ประเภท / interval / เพจปลายทาง (ลิงก์ช่องเปลี่ยนไม่ได้)'
-                 : 'ใส่ลิงก์ช่อง + เลือกเพจ + ประเภทคลิป — บอท baseline แล้วเริ่มตามดูทันที')
+          isEdit ? 'แก้ประเภท / รอบเช็ค / เพจปลายทาง (ลิงก์ช่องเปลี่ยนไม่ได้)'
+                 : 'ใส่ลิงก์ช่อง + เลือกเพจ + ประเภทคลิป — บอทตั้งจุดเริ่มต้นแล้วเริ่มตามดูทันที')
       ),
       el('button', { class: 'btn-ghost', style: 'padding:4px 10px',
         onclick: () => backdrop.remove() }, '✕')
@@ -1527,7 +1527,7 @@
         el('div', {},
           el('label', {}, 'ชื่อกำกับ '),
           el('input', { type: 'text', value: label,
-            placeholder: 'เช่น ช่องซีรีย์จีน A',
+            placeholder: 'เช่น ช่องซีรีส์จีน A',
             oninput: (e) => { label = e.target.value; }
           })
         ),
@@ -1576,7 +1576,7 @@
         el('label', {}, 'ประเภทคลิปที่จะดึง '),
         sel,
         el('div', { style: 'font-size:10px;color:var(--text-muted);margin-top:4px' },
-          'เลือกประเภทเดียวเพื่อกันบอทดูดคลิปข้ามประเภท')
+          'เลือกประเภทเดียวเพื่อกันบอทดาวน์โหลดคลิปข้ามประเภท')
       ));
 
       // pages multi-select
@@ -1700,20 +1700,20 @@
           style: 'display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:0;font-size:13px;font-weight:500'
         });
         pullLabel.appendChild(pullCB);
-        pullLabel.appendChild(el('span', {}, '📥 ดึงคลิปล่าสุดมา Approve เลย'));
+        pullLabel.appendChild(el('span', {}, '📥 ดึงคลิปล่าสุดมารออนุมัติเลย'));
         pullSection.appendChild(pullLabel);
         pullSection.appendChild(el('div', {
           style: 'display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-muted);padding-left:24px;margin-top:6px'
         }, 'จำนวน', pullCountInput, 'คลิป (1–20)'));
         pullSection.appendChild(el('div', {
           style: 'font-size:11px;color:var(--text-muted);margin-top:6px;padding-left:24px'
-        }, 'ถ้าไม่ติ๊ก: บอทจะ baseline เฉยๆ → เห็นเฉพาะคลิปใหม่ที่อัพหลังจากเพิ่มช่อง'));
+        }, 'ถ้าไม่ติ๊ก: บอทจะตั้งจุดเริ่มต้นเฉยๆ → เห็นเฉพาะคลิปใหม่ที่อัพหลังจากเพิ่มช่อง'));
         formContainer.appendChild(pullSection);
       }
 
       // buttons
       const cancelBtn = el('button', { class: 'btn-ghost', onclick: () => backdrop.remove() }, 'ยกเลิก');
-      const submitBtn = el('button', { class: 'btn-primary' }, isEdit ? '✓ บันทึก' : (pullLatestEnabled ? '＋ เพิ่ม + ดึงคลิปล่าสุด' : '＋ เพิ่ม + Baseline'));
+      const submitBtn = el('button', { class: 'btn-primary' }, isEdit ? '✓ บันทึก' : (pullLatestEnabled ? '＋ เพิ่ม + ดึงคลิปล่าสุด' : '＋ เพิ่ม + ตั้งจุดเริ่มต้น'));
       submitBtn.addEventListener('click', async () => {
         if (!label.trim()) return alert('ใส่ชื่อกำกับช่อง');
         if (!url.trim()) return alert('ใส่ลิงก์ช่อง');
@@ -1739,7 +1739,7 @@
             await api('/api/watcher/channels', { method: 'POST', body: JSON.stringify(data) });
             const msg = data.pull_latest > 0
               ? `กำลังดึง ${data.pull_latest} คลิปล่าสุด → ดูในรายการรออนุมัติ`
-              : 'baseline เรียบร้อย — บอทจะตามดูคลิปใหม่ที่อัพหลังจากนี้';
+              : 'ตั้งจุดเริ่มต้นเรียบร้อย — บอทจะตามดูคลิปใหม่ที่อัพหลังจากนี้';
             showToast('เพิ่มช่องแล้ว', msg, 'success');
           }
           backdrop.remove();
@@ -1747,7 +1747,7 @@
         } catch (e) {
           showToast(isEdit ? 'บันทึกไม่สำเร็จ' : 'เพิ่มไม่สำเร็จ', e.message, 'danger');
           submitBtn.disabled = false;
-          submitBtn.textContent = isEdit ? '✓ บันทึก' : (pullLatestEnabled ? '＋ เพิ่ม + ดึงคลิปล่าสุด' : '＋ เพิ่ม + Baseline');
+          submitBtn.textContent = isEdit ? '✓ บันทึก' : (pullLatestEnabled ? '＋ เพิ่ม + ดึงคลิปล่าสุด' : '＋ เพิ่ม + ตั้งจุดเริ่มต้น');
         }
       });
       formContainer.appendChild(el('div',

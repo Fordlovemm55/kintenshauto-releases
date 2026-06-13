@@ -307,7 +307,7 @@
     overlay.id = 'profiles-overlay';
     overlay.style.cssText =
       'position:fixed;z-index:100;' +
-      'background:linear-gradient(160deg,#fbeaf6 0%,#f3e6fb 45%,#ece2fb 100%);' +
+      'background:radial-gradient(900px 520px at 50% -10%,rgba(99,102,241,0.10),transparent 60%),#0f172a;' +
       'overflow-y:auto;padding:28px 36px;display:none;' +
       'box-shadow:inset 0 0 60px rgba(0,0,0,.5)';
     document.body.appendChild(overlay);
@@ -447,7 +447,7 @@
   function renderProxyPoolPanel(container) {
     const box = el('div', { class: 'panel', style: 'margin:14px 0;padding:14px' },
       el('h3', {}, 'พร็อกซี่ไทย (วางทีละหลายตัว)'),
-      el('p', { style: 'font-size:12px;color:#9a7fb3' },
+      el('p', { style: 'font-size:12px;color:var(--text-muted)' },
         'วางพร็อกซี่บรรทัดละ 1 ตัว — host:port หรือ host:port:user:pass หรือ user:pass@host:port'),
       el('textarea', { id: 'proxyPoolText', rows: '8',
         style: 'width:100%;font-family:monospace;font-size:13px',

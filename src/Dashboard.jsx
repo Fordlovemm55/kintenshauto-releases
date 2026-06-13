@@ -24,12 +24,6 @@ const NAV_SECTIONS = [
     ]
   },
   {
-    section: 'บัญชีและเพจ',
-    items: [
-      { key: 'profiles', icon: 'icon-profiles', th: 'จัดการบัญชี' }
-    ]
-  },
-  {
     section: 'ปรับแต่งคอนเทนต์',
     items: [
       { key: 'banners',  icon: 'icon-banners',  th: 'แบนเนอร์' },
@@ -41,6 +35,12 @@ const NAV_SECTIONS = [
     section: 'ระบบ',
     items: [
       { key: 'settings', icon: 'icon-settings', th: 'ตั้งค่า' }
+    ]
+  },
+  {
+    section: 'บัญชีและเพจ',
+    items: [
+      { key: 'profiles', icon: 'icon-profiles', th: 'จัดการบัญชี' }
     ]
   }
 ];
