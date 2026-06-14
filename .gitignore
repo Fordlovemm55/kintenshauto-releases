@@ -20,3 +20,5 @@ logs/
 *.tmp
 # Test artifacts (added during Plan 1)
 coverage/
+# Local dev desktop launcher (sets KINTENSHAUTO_SKIP_AUTH — machine-specific, do not ship)
+/launch-kintenshauto.vbs

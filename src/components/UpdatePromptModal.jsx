@@ -51,18 +51,19 @@ export default function UpdatePromptModal({
       <div className="panel" style={{ width: '100%', maxWidth: 520, padding: 28 }}
            id="update-modal-title">
         <div className="kanji-title" style={{
+          fontFamily: 'Kanit, Sarabun, sans-serif',
           fontSize: 32, marginBottom: 8,
           color: isForce ? 'var(--danger)' : 'var(--gold)'
         }}>
-          {isForce ? '必須更新' : '更新可能'}
+          {isForce ? 'ต้องอัปเดต' : 'มีอัปเดตใหม่'}
         </div>
         <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 6 }}>
-          {isForce ? 'Required Update' : 'Update Available'}
+          {isForce ? 'จำเป็นต้องอัปเดต' : 'มีเวอร์ชันใหม่ให้อัปเดต'}
         </div>
         <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16 }}>
           {isForce
-            ? `Your version is no longer supported. Update to ${version} to continue.`
-            : `Version ${version} is ready to install.`}
+            ? `เวอร์ชันที่คุณใช้อยู่ไม่รองรับแล้ว อัปเดตเป็น ${version} เพื่อใช้งานต่อ`
+            : `เวอร์ชัน ${version} พร้อมติดตั้งแล้ว`}
         </div>
 
         {/* Release notes — only shown in prompt phase to keep transient phases compact */}
@@ -82,7 +83,7 @@ export default function UpdatePromptModal({
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between',
                           fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>
-              <span>Downloading…</span>
+              <span>กำลังดาวน์โหลด…</span>
               <span>
                 {progress ? `${formatMB(progress.transferred)} / ${formatMB(progress.total)} MB` : ''}
                 {progress?.bytesPerSecond ? `  ·  ${formatSpeed(progress.bytesPerSecond)}` : ''}
@@ -112,7 +113,7 @@ export default function UpdatePromptModal({
             background: 'var(--surface-2)', border: '0.5px solid var(--border-faint)',
             color: 'var(--text-secondary)'
           }}>
-            Update downloaded. The app will close, install the update, and reopen automatically.
+            ดาวน์โหลดอัปเดตเสร็จแล้ว โปรแกรมจะปิดตัว ติดตั้งอัปเดต แล้วเปิดขึ้นมาใหม่อัตโนมัติ
           </div>
         )}
 
@@ -123,7 +124,7 @@ export default function UpdatePromptModal({
             background: 'var(--surface-2)', border: '0.5px solid var(--danger)',
             color: 'var(--danger)'
           }}>
-            Update failed: {errorMessage || 'unknown error'}
+            อัปเดตล้มเหลว: {errorMessage || 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ'}
           </div>
         )}
 
@@ -131,21 +132,21 @@ export default function UpdatePromptModal({
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           {phase === 'prompt' && (
             <>
-              {!isForce && <button onClick={onLater}>Later</button>}
+              {!isForce && <button onClick={onLater}>ไว้ทีหลัง</button>}
               <button className="btn-primary" onClick={onUpdate}>
-                {isForce ? 'Download & Install' : 'Update Now'}
+                {isForce ? 'ดาวน์โหลดและติดตั้ง' : 'อัปเดตเลย'}
               </button>
             </>
           )}
           {phase === 'downloaded' && (
             <button className="btn-primary" onClick={onInstall}>
-              Install &amp; Restart
+              ติดตั้งและเริ่มใหม่
             </button>
           )}
           {phase === 'error' && (
             <>
-              {!isForce && <button onClick={onLater}>Later</button>}
-              <button className="btn-primary" onClick={onRetry}>Retry</button>
+              {!isForce && <button onClick={onLater}>ไว้ทีหลัง</button>}
+              <button className="btn-primary" onClick={onRetry}>ลองอีกครั้ง</button>
             </>
           )}
           {/* phase === 'downloading' → no buttons; user must wait */}

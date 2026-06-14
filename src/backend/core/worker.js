@@ -241,6 +241,19 @@ module.exports = function createWorker(db, orchestrator, io, sessionMgr, dbPath)
         db.prepare(`INSERT INTO post_log (job_id, event, detail) VALUES (?, 'publish', ?)`)
           .run(job.id, JSON.stringify({ postId, url: result.url }));
 
+        // FIX #18: poster detected a copyright claim IN THE COMPOSER TAB right after publish.
+        // Hand it straight to the copyright manager (blacklist audio + flag for Set 2 + quota
+        // reconcile) instead of relying only on the separate post-publish monitor — which can't
+        // see anything for placeholder ids — then stop (don't comment on a struck post).
+        if (result.copyrightBlocked) {
+            log('in-tab copyright verdict = BLOCKED → handing to copyright manager');
+            const clip = db.prepare('SELECT audio_fp FROM clips WHERE id = ?').get(job.clip_id);
+            await copyrightMgr.handleCopyrightHit(job.id, clip?.audio_fp, null, null)
+                .catch(e => log('handleCopyrightHit(in-tab): ' + e.message));
+            io.emit('notification:copyright', { jobId: job.id, reason: 'in_tab_verdict' });
+            return;
+        }
+
         // Monitor copyright in background (doesn't block next job)
         monitorCopyright(browser, job, postId).catch(e => log('monitor error: ' + e.message));
 
@@ -251,6 +264,14 @@ module.exports = function createWorker(db, orchestrator, io, sessionMgr, dbPath)
     async function monitorCopyright(browser, job, postId) {
         const monitorSec = Number(getSetting('copyright_monitor_sec', '60'));
         if (monitorSec <= 0) return;
+
+        // Synthetic/placeholder IDs (verified_/processing_/unknown_) don't resolve to a real
+        // post. Visiting them and scanning the page can yield a FALSE copyright verdict that
+        // would blacklist the audio and delete a good post — so skip monitoring entirely.
+        if (!postId || /^(processing_|unknown_|verified_)/i.test(postId)) {
+            console.log(`[worker job#${job.id}] skip copyright monitor — no real post ID (${postId || 'none'})`);
+            return;
+        }
 
         const page = await browser.newPage();
         try {
@@ -285,7 +306,7 @@ module.exports = function createWorker(db, orchestrator, io, sessionMgr, dbPath)
 
         // Skip if we only have a placeholder post ID (processing_<timestamp>) —
         // that URL resolves to FB's "content not available" page and serves no purpose.
-        const isPlaceholderId = !job.fb_post_id || /^(processing_|unknown_)/i.test(job.fb_post_id);
+        const isPlaceholderId = !job.fb_post_id || /^(processing_|unknown_|verified_)/i.test(job.fb_post_id);
         if (isPlaceholderId) {
             console.log(`[worker job#${job.id}] no real FB post ID captured — skipping auto-comment (placeholder: ${job.fb_post_id || 'none'})`);
             return;
@@ -355,11 +376,13 @@ module.exports = function createWorker(db, orchestrator, io, sessionMgr, dbPath)
             SELECT j.*, p.name AS page_name, p.profile_id, p.fb_page_id, p.daily_quota,
                    p.cooldown_min, p.enabled AS page_enabled,
                    pr.name AS profile_name, pr.status AS profile_status,
-                   c.set1_path, c.set2_path, c.caption, c.audio_fp, c.status AS clip_status
+                   c.set1_path, c.set2_path, c.caption, c.audio_fp, c.status AS clip_status,
+                   sv.source AS clip_source
             FROM jobs j
             JOIN pages p ON p.id = j.page_id
             JOIN profiles pr ON pr.id = p.profile_id
             JOIN clips c ON c.id = j.clip_id
+            LEFT JOIN scouted_videos sv ON sv.id = c.scouted_id
             WHERE j.id = ?
         `).get(jobId);
 
@@ -407,7 +430,10 @@ module.exports = function createWorker(db, orchestrator, io, sessionMgr, dbPath)
         try {
             const coverEnabledRow = db.prepare(`SELECT value FROM settings WHERE key = 'cover_enabled'`).get();
             const coverGloballyEnabled = coverEnabledRow?.value === '1' || coverEnabledRow?.value === 1;
-            if (coverGloballyEnabled) {
+            // Local operator-supplied clips ('local' source) never go through the orchestrator's
+            // AI-cover step, so don't block them on a missing AI cover — that would strand them in
+            // preflight forever whenever the global cover setting is on.
+            if (coverGloballyEnabled && job.clip_source !== 'local') {
                 const clipCover = db.prepare(`SELECT cover_path FROM clips WHERE id = ?`).get(job.clip_id)?.cover_path;
                 const coverOk = clipCover && fs.existsSync(clipCover);
                 checks.push({

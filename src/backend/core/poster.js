@@ -13,6 +13,7 @@
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const Database = require('better-sqlite3');   // ✅ FIX: was referenced in findChromeExecutable but never imported at module scope, so the settings `chrome_executable_path` override silently threw + was ignored
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 
@@ -156,7 +157,12 @@ async function tryReconnect(profile) {
 const spawnedChromes = new Map();  // profileId -> { proc, port }
 
 function pickPortForProfile(profileId) {
-    return 9333 + (Number(profileId) % 500);
+    // ✅ FIX: was `% 500`, so profiles whose ids differed by a multiple of 500 (1 & 501, …)
+    // mapped to the SAME debug port → the second launch could attach to the first profile's
+    // Chrome and post to the WRONG account. AUTOINCREMENT ids never reset on delete, so this
+    // is reachable over time. Widen the range so distinct profiles can't realistically collide
+    // (ports stay well within the safe 9333–29332 band).
+    return 9333 + (Number(profileId) % 20000);
 }
 
 async function waitForDebugPort(port, timeoutMs = 20000) {
@@ -2538,6 +2544,9 @@ async function postReel({ browser, videoPath, caption, coverPath, pageId, pageNa
         let posted = false;
         let detectedVia = null;
         let copyrightSafeConfirmed = false;
+        // ✅ FIX #18: in-tab post-publish copyright verdict — was only logged and thrown away.
+        // Now captured + returned so the worker can hand a real strike to the copyright manager.
+        let copyrightBlockedInTab = false;
 
         for (let i = 0; i < 25; i++) {
             await new Promise(r => setTimeout(r, 1500));
@@ -2624,8 +2633,10 @@ async function postReel({ browser, videoPath, caption, coverPath, pageId, pageNa
                     onLog?.('✓ post-publish copyright verdict: SAFE');
                     break;
                 } else if (verdict === 'blocked') {
-                    onLog?.('⚠ post-publish copyright verdict: BLOCKED — will need Set 2 retry');
-                    // Don't fail the job — the post WAS published, just flag it
+                    copyrightBlockedInTab = true;
+                    onLog?.('⚠ post-publish copyright verdict: BLOCKED — flagging for Set 2 retry');
+                    // Don't fail the job — the post WAS published; the returned flag lets the
+                    // worker hand it to the copyright manager (blacklist audio + queue Set 2).
                     break;
                 }
             }
@@ -2638,34 +2649,42 @@ async function postReel({ browser, videoPath, caption, coverPath, pageId, pageNa
         // Wait a bit longer (6s total) so FB has time to redirect from composer → processing URL
         await new Promise(r => setTimeout(r, 2000));
         let finalUrl = page.url();
-        let postIdMatch = /\/(?:videos|reel|posts|processing_)(\d+)/.exec(finalUrl)
-                       || /\/processing_(\d+)/.exec(finalUrl);
+        // Capture the URL segment TYPE too: videos/reel/posts = a real published id;
+        // 'processing_' = FB's still-processing placeholder, which is NOT a confirmed post
+        // (it can also appear when FB silently blocks the content).
+        const TYPE_ID = /\/(videos|reel|posts|processing_)(\d+)/;
+        let postIdMatch = TYPE_ID.exec(finalUrl);
         if (!postIdMatch) {
             // Retry read after another 4s — FB sometimes takes time to redirect
             await new Promise(r => setTimeout(r, 4000));
             finalUrl = page.url();
-            postIdMatch = /\/(?:videos|reel|posts|processing_)(\d+)/.exec(finalUrl)
-                       || /\/processing_(\d+)/.exec(finalUrl);
+            postIdMatch = TYPE_ID.exec(finalUrl);
         }
-        if (postIdMatch) {
-            return { success: true, postId: postIdMatch[1], url: finalUrl, detectedVia };
+        // A REAL post id (videos/reel/posts) is a definitive success — return it immediately.
+        if (postIdMatch && postIdMatch[1] !== 'processing_') {
+            return { success: true, postId: postIdMatch[2], url: finalUrl, detectedVia, copyrightBlocked: copyrightBlockedInTab };
         }
 
-        // ✅ FIX: เดิม "success modal" ตรวจไม่แม่น — modal "กำลังประมวลผลคลิป Reels"
-        //   อาจปรากฏขณะที่ FB block content เงียบๆ (gambling/spam filter)
-        //   → คลิปไม่ขึ้นจริงแต่ระบบ mark posted = false positive
-        // วิธีแก้: navigate ไป Reels tab ของเพจ + ตรวจหา caption ของเรา
-        //   ถ้าเจอ → posted จริง / ถ้าไม่เจอใน 60 วิ → mark failed
-        onLog?.(`no post ID in URL (${finalUrl}) — verifying by checking page Reels tab...`);
+        // ✅ FIX: เดิม URL "processing_<id>" ถูกตีเป็นสำเร็จทันที (และตัด prefix เหลือเลขล้วน)
+        //   → false success ตอน FB ยัง process/บล็อกเงียบ + เลขล้วนทำให้ guard placeholder พัง
+        // ใหม่: ทั้ง processing_ และ "ไม่มี id" ต้อง verify ที่ Reels tab ก่อน ถึงจะถือว่าสำเร็จ
+        const processingId = postIdMatch ? `processing_${postIdMatch[2]}` : null;
+        onLog?.(processingId
+            ? `got processing placeholder (${processingId}) — verifying on page Reels tab...`
+            : `no post ID in URL (${finalUrl}) — verifying by checking page Reels tab...`);
         try {
             const verifyOk = await verifyPostOnPageReels(page, pageId, caption, onLog);
             if (verifyOk) {
                 return {
                     success: true,
-                    postId: `verified_${Date.now()}`,
+                    // Keep a placeholder id (never bare digits) so downstream guards treat it as
+                    // "no real id": copyright monitor + auto-comment skip it instead of visiting
+                    // facebook.com/<digits> (which resolves to the processing placeholder page).
+                    postId: processingId || `verified_${Date.now()}`,
                     url: finalUrl,
                     detectedVia,
-                    noPostId: true
+                    noPostId: true,
+                    copyrightBlocked: copyrightBlockedInTab
                 };
             } else {
                 onLog?.('✗ verification FAILED — Reel ไม่อยู่ในเพจ (FB อาจ block content)');
@@ -2678,14 +2697,14 @@ async function postReel({ browser, videoPath, caption, coverPath, pageId, pageNa
                 };
             }
         } catch (verifyErr) {
-            onLog?.(`verify step failed: ${verifyErr.message} — falling back to "posted" status (best effort)`);
+            // ✅ FIX: a verification ERROR is NOT a successful post. Returning success:true here
+            //   made the worker mark the job 'posted' though publish was never confirmed.
+            //   Surface a failure so the worker (markFailed) lets the user retry.
+            onLog?.(`verify step failed: ${verifyErr.message} — treating as NOT posted (needs retry)`);
             return {
-                success: true,
-                postId: `unknown_${Date.now()}`,
-                url: finalUrl,
-                detectedVia,
-                noPostId: true,
-                verifyFailed: true
+                success: false,
+                reason: 'verify_error',
+                message: 'ตรวจยืนยันการโพสต์ไม่สำเร็จ (' + String(verifyErr.message || 'unknown').slice(0, 200) + ') — กรุณาลองโพสต์ใหม่ หรือตรวจเพจเองว่ามี Reel หรือยัง'
             };
         }
     } catch (err) {

@@ -91,20 +91,29 @@ describe('_videoFormatSelector — กันลายน้ำ TikTok', () => {
     let w;
     beforeEach(() => { ({ w } = makeWatcher()); });
 
-    it('TikTok URL → ตัด format_id=download (ตัวมีลายน้ำ) ออกจาก fallback', () => {
+    const CAP = '[width<=1920][height<=1920]';
+    const TIKTOK_SEL = `bv*${CAP}+ba/b${CAP}[format_id!=download]/bv*+ba/b[format_id!=download]`;
+    const DEFAULT_SEL = `bv*${CAP}[vcodec^=avc1]+ba[acodec^=mp4a]/bv*${CAP}+ba/b${CAP}/bv*+ba/b`;
+
+    it('TikTok URL → ตัด format_id=download (ตัวมีลายน้ำ) ออก + จำกัดขนาด Full-HD', () => {
         const sel = w._videoFormatSelector('https://www.tiktok.com/@x/video/123');
-        expect(sel).toBe('bv*+ba/b[format_id!=download]');
+        expect(sel).toBe(TIKTOK_SEL);
         expect(sel).toContain('format_id!=download');
+        expect(sel).toContain('width<=1920');
     });
 
-    it('YouTube URL → ใช้ selector เดิม (ไม่กระทบ)', () => {
-        expect(w._videoFormatSelector('https://www.youtube.com/watch?v=abc')).toBe('bv*+ba/b');
+    it('YouTube URL → จำกัด Full-HD + เลือก H.264/AAC ก่อน + fallback กันพลาด', () => {
+        const sel = w._videoFormatSelector('https://www.youtube.com/watch?v=abc');
+        expect(sel).toBe(DEFAULT_SEL);
+        expect(sel).toContain('width<=1920');
+        expect(sel).toContain('vcodec^=avc1');
+        expect(sel.endsWith('/bv*+ba/b')).toBe(true);
     });
 
-    it('Facebook/Bilibili/อื่น ๆ → ใช้ selector เดิม', () => {
-        expect(w._videoFormatSelector('https://www.facebook.com/watch/?v=1')).toBe('bv*+ba/b');
-        expect(w._videoFormatSelector('https://www.bilibili.com/video/BV1')).toBe('bv*+ba/b');
-        expect(w._videoFormatSelector('https://example.com/x')).toBe('bv*+ba/b');
+    it('Facebook/Bilibili/อื่น ๆ → ใช้ selector มาตรฐาน (จำกัด Full-HD)', () => {
+        expect(w._videoFormatSelector('https://www.facebook.com/watch/?v=1')).toBe(DEFAULT_SEL);
+        expect(w._videoFormatSelector('https://www.bilibili.com/video/BV1')).toBe(DEFAULT_SEL);
+        expect(w._videoFormatSelector('https://example.com/x')).toBe(DEFAULT_SEL);
     });
 });
 

@@ -727,21 +727,24 @@ class ChannelWatcher extends EventEmitter {
     }
 
     /**
-     * เลือก yt-dlp format string ตาม platform
-     *   - TikTok: ตัด format_id 'download' (ตัวมีลายน้ำ TikTok logo + @username)
-     *     ออกจาก fallback ด้วย → 'bv*+ba/b[format_id!=download]'
-     *     • bv*+ba = best video-only + best audio (ไม่ใช่ตัว watermarked อยู่แล้ว)
-     *     • b[format_id!=download] = ถ้า TikTok คืนเฉพาะ muxed → เลือกตัวที่ "ไม่ใช่ download"
-     *       (play_addr สะอาด) แทนที่จะเผลอได้ตัว download_addr ที่มีลายน้ำ
-     *   - platform อื่น: 'bv*+ba/b' เดิม (ไม่กระทบ YouTube/FB/Bilibili)
+     * เลือก yt-dlp format string ตาม platform — เน้น "ไฟล์เล็กสุด คุณภาพเท่าที่ output ใช้จริง"
+     *
+     * เพดานขนาด CAP = [width<=1920][height<=1920] (Full-HD ทั้งสองด้าน):
+     *   - คลิปแนวตั้ง 1080x1920 (Shorts/Reels/TikTok) และแนวนอน 1920x1080 → ได้คุณภาพเต็ม
+     *   - 4K/1440p ถูกข้าม (ไฟล์ใหญ่มากแต่ output Reels คือ 1080x1920 อยู่แล้ว ไม่เห็นความต่าง)
+     *   - ไม่เคย upscale: ถ้าต้นฉบับเล็กกว่า FHD ก็ได้ตัวที่ดีที่สุดเท่าต้นฉบับ
+     * เลือก H.264(avc1)+AAC(mp4a) ก่อน → คลิปดิบ (โหมดไม่ตัดต่อ) โพสต์ FB/ทุกแพลตฟอร์มได้เลย
+     * ปิดท้ายด้วย 'bv*+ba/b' เสมอ → ถ้า source ไม่มี format ที่ต้องการก็ยังดาวน์โหลดได้ ไม่พัง
+     *   - TikTok: คง guard กันลายน้ำ (ตัด format_id 'download') ไว้ทุก fallback ที่เป็น muxed
      * pure → unit-test ได้
      */
     _videoFormatSelector(sourceUrl) {
         const platform = this._detectPlatform(sourceUrl);
+        const CAP = '[width<=1920][height<=1920]';
         if (platform === 'tiktok') {
-            return 'bv*+ba/b[format_id!=download]';
+            return `bv*${CAP}+ba/b${CAP}[format_id!=download]/bv*+ba/b[format_id!=download]`;
         }
-        return 'bv*+ba/b';
+        return `bv*${CAP}[vcodec^=avc1]+ba[acodec^=mp4a]/bv*${CAP}+ba/b${CAP}/bv*+ba/b`;
     }
 
     // Wraps an attempt fn with 3 retry layers — anonymous, PO Token, cookies.
@@ -1421,10 +1424,12 @@ class ChannelWatcher extends EventEmitter {
 
             // Step 2: pre-INSERT scouted_videos กับ file_path
             // → orchestrator (ที่จะเรียกถัดไป) จะ dedup ด้วย url_hash, เห็น file_path มี → ไม่ download ซ้ำ
-            // ✅ FIX: ใช้ canonicalUrl + hashUrl เดียวกับ orchestrator (SHA1 16 chars)
-            //         ไม่งั้น dedup แตก → orchestrator INSERT row ใหม่ + source_url UNIQUE block → crash
-            const canonical = orchCanonicalUrl(row.source_url);
-            const urlHash = orchHashUrl(canonical);
+            // ✅ FIX: hash the RAW url exactly as orchestrator._execute does (hashUrl(sourceUrl)).
+            //   Canonicalizing here produced a DIFFERENT url_hash than the orchestrator's lookup,
+            //   so its dedup SELECT missed this pre-inserted row; the source_url UNIQUE constraint
+            //   then blocked the orchestrator's re-INSERT → scoutedRow came back undefined → crash
+            //   on `scoutedRow.id`. Also keeps url_hash distinct per video (?v=A vs ?v=B).
+            const urlHash = orchHashUrl(row.source_url);
             this.db.prepare(`
                 INSERT OR IGNORE INTO scouted_videos
                     (source, source_url, url_hash, title, duration_sec, thumbnail_url,

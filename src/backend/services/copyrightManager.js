@@ -83,8 +83,10 @@ class CopyrightManager extends EventEmitter {
     }
 
     async checkPostStatus(page, postId) {
-        // Skip placeholder IDs (processing_<timestamp>) — those don't resolve on FB.
-        if (!postId || /^(processing_|unknown_)/i.test(postId)) {
+        // Skip placeholder/synthetic IDs — these don't resolve to a real post on FB, so
+        // visiting them and scanning the page would produce a false copyright verdict.
+        // 'verified_' = poster confirmed the Reel via the Reels tab but never parsed a numeric id.
+        if (!postId || /^(processing_|unknown_|verified_)/i.test(postId)) {
             return { blocked: false, skipped: true, reason: 'no_real_post_id' };
         }
         try {
@@ -112,18 +114,34 @@ class CopyrightManager extends EventEmitter {
 
     isCopyrightWarning(text) {
         if (!text) return false;
-        const keywords = [
-            'copyright',
-            'ลิขสิทธิ์',
-            'copyrighted music',
-            'ดนตรีที่มีลิขสิทธิ์',
-            'third-party content',
-            'content id',
-            'muted',
-            'ถูกปิดเสียง'
-        ];
         const lower = text.toLowerCase();
-        return keywords.some(kw => lower.includes(kw.toLowerCase()));
+        // Match SPECIFIC copyright-claim / muted-audio phrases only.
+        // Bare words like "copyright" / "muted" / "content id" / "ลิขสิทธิ์" appear in
+        // Facebook's footer + menu chrome on EVERY logged-in page, so scanning the whole
+        // page body for them produced false strikes that blacklisted audio and deleted
+        // successfully-posted Reels. These multi-word phrases only show up in an actual claim.
+        const phrases = [
+            'copyrighted content',
+            'copyrighted music',
+            'copyright claim',
+            'copyright infringement',
+            'because of a copyright',
+            'may contain copyrighted',
+            'matched third-party content',
+            'content id claim',
+            'we muted the audio',
+            'muted the audio',
+            'audio was muted',
+            'audio has been muted',
+            "can't use this audio",
+            'เนื้อหาที่มีลิขสิทธิ์',
+            'ดนตรีที่มีลิขสิทธิ์',
+            'มีลิขสิทธิ์ของบุคคลที่สาม',
+            'ปิดเสียงเนื่องจาก',
+            'ถูกปิดเสียงเพราะ',
+            'ถูกปิดเสียงเนื่องจาก'
+        ];
+        return phrases.some(p => lower.includes(p.toLowerCase()));
     }
 
     /**
@@ -131,6 +149,12 @@ class CopyrightManager extends EventEmitter {
      */
     async handleCopyrightHit(jobId, audioFp, postId = null, page = null) {
         const tx = this.db.transaction(() => {
+            // Read prior state BEFORE the update so we can tell a pre-publish hit (job was
+            // 'running', never posted) from a post-publish strike (job was 'posted' and the
+            // live post is about to be deleted).
+            const job = this.db.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId);
+            const wasPosted = job && job.status === 'posted';
+
             this.db.prepare(`
                 UPDATE jobs
                 SET copyright_blocked = 1, status = 'copyright_waiting'
@@ -153,12 +177,24 @@ class CopyrightManager extends EventEmitter {
                 VALUES (?, 'copyright_detected', ?)
             `).run(jobId, JSON.stringify({ post_id: postId, audio_fp: audioFp }));
 
-            const job = this.db.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId);
-            this.db.prepare(`
-                UPDATE daily_stats
-                SET copyright_blocks = copyright_blocks + 1
-                WHERE page_id = ? AND date = date('now', 'localtime')
-            `).run(job.page_id);
+            if (job) {
+                // Upsert so the strike is recorded even on the day's first event (a bare
+                // UPDATE was a no-op when no daily_stats row existed yet).
+                this.db.prepare(`
+                    INSERT INTO daily_stats (page_id, date, copyright_blocks)
+                    VALUES (?, date('now', 'localtime'), 1)
+                    ON CONFLICT(page_id, date) DO UPDATE SET copyright_blocks = copyright_blocks + 1
+                `).run(job.page_id);
+                // When we actually delete the live post (real id + page provided), don't keep
+                // counting it against the daily quota — otherwise a removed Reel still burns a
+                // posting slot. (An in-tab verdict with page=null leaves the post up → keep the count.)
+                if (wasPosted && postId && page) {
+                    this.db.prepare(`
+                        UPDATE daily_stats SET posts_count = MAX(0, posts_count - 1)
+                        WHERE page_id = ? AND date = date('now', 'localtime')
+                    `).run(job.page_id);
+                }
+            }
         });
 
         tx();
@@ -178,8 +214,8 @@ class CopyrightManager extends EventEmitter {
     }
 
     async deletePost(page, postId) {
-        // Skip placeholder IDs — can't delete a post we don't have a real ID for.
-        if (!postId || /^(processing_|unknown_)/i.test(postId)) {
+        // Skip placeholder/synthetic IDs — can't delete a post we don't have a real ID for.
+        if (!postId || /^(processing_|unknown_|verified_)/i.test(postId)) {
             console.log(`[CopyrightManager] deletePost skipped — no real post ID (got: ${postId || 'none'})`);
             return;
         }
@@ -235,7 +271,7 @@ class CopyrightManager extends EventEmitter {
 
             const result = this.db.prepare(`
                 INSERT INTO jobs (clip_id, page_id, scheduled_at, use_set, status)
-                VALUES (?, ?, datetime('now', '+30 seconds'), 2, 'pending')
+                VALUES (?, ?, datetime('now', 'localtime', '+30 seconds'), 2, 'pending')
             `).run(job.clip_id, job.page_id);
 
             this.db.prepare(`

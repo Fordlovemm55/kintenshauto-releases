@@ -1,0 +1,177 @@
+{
+  "generatedWith": "imagen-4.0-ultra-generate-001",
+  "keyFingerprint": "AQ.A…NUnA",
+  "assets": {
+    "bg-app": {
+      "file": "assets/ui/bg-app.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "16:9",
+      "bytes": 1033665,
+      "sha256": "94555dc29464b160",
+      "status": "ok",
+      "at": "2026-06-11T18:43:27"
+    },
+    "bg-login": {
+      "file": "assets/ui/bg-login.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "16:9",
+      "bytes": 1122109,
+      "sha256": "1b09b8164530a265",
+      "status": "ok",
+      "at": "2026-06-11T18:44:03"
+    },
+    "bg-setup": {
+      "file": "assets/ui/bg-setup.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "16:9",
+      "bytes": 1097263,
+      "sha256": "2ea19453747caaf1",
+      "status": "ok",
+      "at": "2026-06-11T18:44:13"
+    },
+    "crest": {
+      "file": "assets/ui/crest.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "1:1",
+      "bytes": 889392,
+      "sha256": "bbb3b082af462176",
+      "status": "ok",
+      "at": "2026-06-11T18:44:24"
+    },
+    "icon-home": {
+      "file": "assets/ui/icon-home.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "1:1",
+      "bytes": 943655,
+      "sha256": "044b809a797cc6e8",
+      "status": "ok",
+      "at": "2026-06-11T18:44:33"
+    },
+    "icon-settings": {
+      "file": "assets/ui/icon-settings.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "1:1",
+      "bytes": 959360,
+      "sha256": "a3622b9b62b1b9d6",
+      "status": "ok",
+      "at": "2026-06-11T18:45:45"
+    },
+    "empty-generic": {
+      "file": "assets/ui/empty-generic.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "1:1",
+      "bytes": 901991,
+      "sha256": "09209b7fc979833f",
+      "status": "ok",
+      "at": "2026-06-11T18:46:58"
+    },
+    "icon-profiles": {
+      "file": "assets/ui/icon-profiles.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "1:1",
+      "bytes": 961731,
+      "sha256": "7b904b37d7dd676c",
+      "status": "ok",
+      "at": "2026-06-11T18:44:43"
+    },
+    "icon-banners": {
+      "file": "assets/ui/icon-banners.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "1:1",
+      "bytes": 883174,
+      "sha256": "c48305677ac20172",
+      "status": "ok",
+      "at": "2026-06-11T18:44:52"
+    },
+    "icon-comments": {
+      "file": "assets/ui/icon-comments.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "1:1",
+      "bytes": 940429,
+      "sha256": "ef5b83d74f3d09c2",
+      "status": "ok",
+      "at": "2026-06-11T18:45:01"
+    },
+    "icon-ai": {
+      "file": "assets/ui/icon-ai.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "1:1",
+      "bytes": 878397,
+      "sha256": "6b13da3362bcb289",
+      "status": "ok",
+      "at": "2026-06-11T18:45:11"
+    },
+    "icon-queue": {
+      "file": "assets/ui/icon-queue.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "1:1",
+      "bytes": 930609,
+      "sha256": "03028912b078eba8",
+      "status": "ok",
+      "at": "2026-06-11T18:45:25"
+    },
+    "icon-reviews": {
+      "file": "assets/ui/icon-reviews.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "1:1",
+      "bytes": 979247,
+      "sha256": "21b32e68e252270f",
+      "status": "ok",
+      "at": "2026-06-11T18:45:36"
+    },
+    "icon-watcher": {
+      "file": "assets/ui/icon-watcher.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "1:1",
+      "bytes": 967147,
+      "sha256": "9cb863c6f398fac9",
+      "status": "ok",
+      "at": "2026-06-11T18:45:57"
+    },
+    "empty-queue": {
+      "file": "assets/ui/empty-queue.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "1:1",
+      "bytes": 910404,
+      "sha256": "fb4a620e2542c76f",
+      "status": "ok",
+      "at": "2026-06-11T18:46:06"
+    },
+    "empty-reviews": {
+      "file": "assets/ui/empty-reviews.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "1:1",
+      "bytes": 912585,
+      "sha256": "cf8626206794c868",
+      "status": "ok",
+      "at": "2026-06-11T18:46:17"
+    },
+    "empty-comments": {
+      "file": "assets/ui/empty-comments.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "1:1",
+      "bytes": 872962,
+      "sha256": "595dfec528ffa117",
+      "status": "ok",
+      "at": "2026-06-11T18:46:30"
+    },
+    "empty-banners": {
+      "file": "assets/ui/empty-banners.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "1:1",
+      "bytes": 907064,
+      "sha256": "cb593e8bbd0a545d",
+      "status": "ok",
+      "at": "2026-06-11T18:46:39"
+    },
+    "empty-watcher": {
+      "file": "assets/ui/empty-watcher.png",
+      "model": "imagen-4.0-ultra-generate-001",
+      "aspect": "1:1",
+      "bytes": 995788,
+      "sha256": "a8c89beb43b42c71",
+      "status": "ok",
+      "at": "2026-06-11T18:46:49"
+    }
+  }
+}

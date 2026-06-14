@@ -174,12 +174,12 @@ class CommentTemplateEngine {
         return {
             ok: true,
             rendered: this.render(content, sampleContext || {
-                page_name: 'รวมซีรีย์สั้น',
+                page_name: 'รวมซีรีส์สั้น',
                 clip_number: 3,
                 total_clips: 10,
-                hashtag: '#ซีรีย์จีน',
+                hashtag: '#ซีรีส์จีน',
                 caption: 'ดูฟรี...',
-                video_title: 'ซีรีย์จีน EP.1'
+                video_title: 'ซีรีส์จีน EP.1'
             })
         };
     }

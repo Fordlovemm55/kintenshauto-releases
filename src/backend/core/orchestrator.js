@@ -195,7 +195,9 @@ async function downloadVideo(url, onLog) {
         : null;
 
     const ytdlpArgs = [
-        '-f', 'bv*+ba/b',
+        // ไฟล์เล็กสุด คุณภาพเท่าที่ output 1080x1920 ใช้จริง: จำกัด Full-HD (≤1920 ทั้งสองด้าน)
+        // + เลือก H.264/AAC ก่อน (คลิปดิบโพสต์ได้เลย) → ปิดท้าย 'bv*+ba/b' กันดาวน์โหลดพลาด
+        '-f', 'bv*[width<=1920][height<=1920][vcodec^=avc1]+ba[acodec^=mp4a]/bv*[width<=1920][height<=1920]+ba/b[width<=1920][height<=1920]/bv*+ba/b',
         '--merge-output-format', 'mp4',
         '--no-playlist',
         '--no-warnings',
@@ -439,6 +441,7 @@ class Orchestrator {
     enqueue({ pageId, pageIds, sourceUrl, keyword, pageKeywords, presetId,
               clipsPerVideo, clipDurationSec, clipsPerPage, scoutLimit,
               useWatcherCaption,    // ✅ Channel Watcher's separate caption prompt
+              hintedKeyword,        // ✅ FIX: channel label for {channel_label} on sourceUrl path
               skipAutoEdit }) {     // ✅ NEW: ปิดตัดต่ออัตโนมัติ — โพสต์ raw clip ตรงๆ
         if (!sourceUrl && !keyword && !pageKeywords) {
             throw new Error('Must provide sourceUrl, keyword, or pageKeywords');
@@ -486,7 +489,7 @@ class Orchestrator {
                         sourceUrl,
                         hintedTitle: directTitle,
                         hintedThumbnail: null,
-                        hintedKeyword: null,
+                        hintedKeyword: hintedKeyword || null,   // ✅ FIX: forward channel label
                         presetId, clipsPerVideo, clipDurationSec,
                         useWatcherCaption,    // ✅ pass-through
                         skipAutoEdit          // ✅ NEW: pass-through
@@ -731,8 +734,20 @@ class Orchestrator {
             throw new Error(`คลิปสั้นเกินไป (${duration}s < ${clipDurationSec}s)`);
         }
 
-        // 2. Compute clip windows
-        const clipWindows = this._pickClipWindows(duration, clipsPerVideo, clipDurationSec);
+        // Speed-up factor for copyright evasion (1.0–2.0). Read here so window planning can
+        // account for the EXTRA source seconds each sped-up clip consumes (clipDur × speed):
+        // sliceClip reads `durSec * speed` of source, so windows must be spaced by that span
+        // or consecutive sped-up clips overlap / run short.
+        const speedFactor = (() => {
+            try {
+                const row = this.db.prepare(`SELECT value FROM settings WHERE key = 'slice_speed_factor'`).get();
+                const n = Number(row?.value);
+                return Number.isFinite(n) && n >= 1.0 && n <= 2.0 ? n : 1.0;
+            } catch { return 1.0; }
+        })();
+
+        // 2. Compute clip windows (speed-aware spacing)
+        const clipWindows = this._pickClipWindows(duration, clipsPerVideo, clipDurationSec, speedFactor);
         emit('slicing_start', { windows: clipWindows.length });
 
         // 3. Get banner preset (if any)
@@ -846,15 +861,6 @@ class Orchestrator {
                     bumpJobMsg(`${label} ${pct}%`);
                 }
             };
-
-            // Speed-up factor for copyright evasion (read once per loop — cheap)
-            const speedFactor = (() => {
-                try {
-                    const row = this.db.prepare(`SELECT value FROM settings WHERE key = 'slice_speed_factor'`).get();
-                    const n = Number(row?.value);
-                    return Number.isFinite(n) && n >= 1.0 && n <= 2.0 ? n : 1.0;
-                } catch { return 1.0; }
-            })();
 
             const speedMsg = speedFactor > 1.0 ? ` (เร่ง ${speedFactor}x)` : '';
 
@@ -1071,19 +1077,24 @@ class Orchestrator {
         this.io?.emit('pipeline:done', { runId, clipsCreated: createdClips.length });
     }
 
-    _pickClipWindows(totalDuration, n, clipDur) {
-        // Skip first and last 10% (credits/intro), space evenly
+    _pickClipWindows(totalDuration, n, clipDur, speedFactor = 1.0) {
+        // Skip first and last 10% (credits/intro), space evenly.
+        // srcSpan = the actual SOURCE seconds each clip consumes. When sped up, sliceClip reads
+        // clipDur*speed of source per clip, so spacing/fitting must use srcSpan (not clipDur) or
+        // consecutive clips overlap in the source and the last clip can run past usableEnd.
+        const speed = Math.max(1.0, Math.min(2.0, Number(speedFactor) || 1.0));
+        const srcSpan = clipDur * speed;
         const usableStart = totalDuration * 0.1;
         const usableEnd = totalDuration * 0.9;
         const usableLen = usableEnd - usableStart;
-        if (usableLen < clipDur * n) {
+        if (usableLen < srcSpan * n) {
             // Not enough room — shrink count
-            n = Math.max(1, Math.floor(usableLen / clipDur));
+            n = Math.max(1, Math.floor(usableLen / srcSpan));
         }
-        const gap = (usableLen - clipDur * n) / Math.max(1, n - 1);
+        const gap = (usableLen - srcSpan * n) / Math.max(1, n - 1);
         const windows = [];
         for (let i = 0; i < n; i++) {
-            const start = Math.floor(usableStart + i * (clipDur + gap));
+            const start = Math.floor(usableStart + i * (srcSpan + gap));
             windows.push({ start, dur: clipDur });
         }
         return windows;

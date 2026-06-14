@@ -5,8 +5,8 @@
  * Usage:
  *   const provider = await getProvider(pageId);
  *   const caption = await provider.generateCaption({
- *     videoTitle: "ซีรีย์จีน EP.1",
- *     niche: "ซีรีย์จีน",
+ *     videoTitle: "ซีรีส์จีน EP.1",
+ *     niche: "ซีรีส์จีน",
  *     duration: 90
  *   });
  */
@@ -393,13 +393,15 @@ class CaptionService {
             ? this.db.prepare('SELECT * FROM pages WHERE id = ?').get(pageId)
             : null;
         if (mode === 'source_title') {
-            const title = (videoContext.videoTitle || 'ซีรีย์น่าดู').slice(0, 100);
+            const title = (videoContext.videoTitle || 'ซีรีส์น่าดู').slice(0, 100);
             const ep = videoContext.clipNumber ? ` EP.${videoContext.clipNumber}` : '';
             return this._renderTemplate(`${title}${ep} {emoji}`, videoContext, pageRow);
         }
-        // 'template'
+        // 'template' — default uses only supported {var} tokens. The old default had a
+        // '{? EP.{clip_number}}' conditional that _renderTemplate doesn't understand, so the
+        // literal braces ('{? EP.3}') leaked into the posted caption.
         const tpl = this._getSetting('caption_template')
-            || '{video_title}{? EP.{clip_number}} {emoji}\n#ซีรีย์ #คลิปดี';
+            || '{video_title} EP.{clip_number} {emoji}\n#ซีรีส์ #คลิปดี';
         return this._renderTemplate(tpl, videoContext, pageRow);
     }
 
@@ -436,7 +438,7 @@ class CaptionService {
         const selectedModel = promptRow.selected_model;
         if (selectedModel && CAPTION_MODELS[selectedModel]) {
             const targetProvider = CAPTION_MODELS[selectedModel].provider;
-            const r = this.db.prepare(`SELECT * FROM ai_providers WHERE provider = ? LIMIT 1`).get(targetProvider);
+            const r = this.db.prepare(`SELECT * FROM ai_providers WHERE provider = ? AND enabled = 1 LIMIT 1`).get(targetProvider);
             if (r) {
                 providerRow = r;
                 modelOverride = selectedModel;
@@ -448,7 +450,7 @@ class CaptionService {
         if (!providerRow) {
             const order = ['openai', 'anthropic', 'gemini'];
             for (const p of order) {
-                const r = this.db.prepare(`SELECT * FROM ai_providers WHERE provider = ? LIMIT 1`).get(p);
+                const r = this.db.prepare(`SELECT * FROM ai_providers WHERE provider = ? AND enabled = 1 LIMIT 1`).get(p);
                 if (r) { providerRow = r; break; }
             }
         }
@@ -556,12 +558,12 @@ class CaptionService {
         const wModel = getSetting('watcher_caption_model');
         if (wModel && CAPTION_MODELS[wModel]) {
             const target = CAPTION_MODELS[wModel].provider;
-            const r = this.db.prepare(`SELECT * FROM ai_providers WHERE provider = ? LIMIT 1`).get(target);
+            const r = this.db.prepare(`SELECT * FROM ai_providers WHERE provider = ? AND enabled = 1 LIMIT 1`).get(target);
             if (r) { providerRow = r; modelOverride = wModel; }
         }
         if (!providerRow) {
             for (const p of ['openai', 'anthropic', 'gemini']) {
-                const r = this.db.prepare(`SELECT * FROM ai_providers WHERE provider = ? LIMIT 1`).get(p);
+                const r = this.db.prepare(`SELECT * FROM ai_providers WHERE provider = ? AND enabled = 1 LIMIT 1`).get(p);
                 if (r) { providerRow = r; break; }
             }
         }
@@ -644,9 +646,9 @@ class CaptionService {
     }
 
     fallbackTemplate(ctx) {
-        const title = (ctx.videoTitle || 'ซีรีย์น่าดู').slice(0, 100);
+        const title = (ctx.videoTitle || 'ซีรีส์น่าดู').slice(0, 100);
         const num = ctx.clipNumber ? ` EP.${ctx.clipNumber}` : '';
-        return `${title}${num} 🎬\nดูต่อในคอมเมนต์ได้เลย #ซีรีย์จีน #ดูฟรี`;
+        return `${title}${num} 🎬\nดูต่อในคอมเมนต์ได้เลย #ซีรีส์จีน #ดูฟรี`;
     }
 
     addProvider(providerType, apiKey, model, label) {

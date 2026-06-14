@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [1.0.26] — 2026-06-13
+
+### Added — Consolidated "Caption AI" page
+- All caption + AI-cover + API-key settings now live on the single **"แคปชั่น AI"** screen with a mode-driven layout (ใช้ AI / แม่แบบ / ใช้ชื่อวิดีโอ / ปิด); the prompts list shows only in AI mode, the model price table collapses, and tokens/temperature tuck under "ขั้นสูง".
+- New shared `src/components/settingsKit.jsx` (`useSettings` / `SettingRow` / `SaveBar`) backs both the Caption AI page and the trimmed Settings page (Settings no longer duplicates caption/cover/key controls).
+
+### Fixed — Pipeline correctness audit (30 confirmed bugs, find → post)
+- **Copyright false strikes:** `isCopyrightWarning` now matches specific claim phrases instead of scanning the whole page for bare words like "copyright"/"muted" (which appear in FB's footer); synthetic post-ids (`verified_`/`processing_`/`unknown_`) are skipped by the copyright + comment guards; the in-tab post-publish verdict is acted on instead of logged; `copyright_blocks` uses an upsert and a removed post's quota slot is reclaimed.
+- **Post-success reliability:** a verification error or an unconfirmed `processing_` URL no longer reports the post as succeeded; placeholder ids keep their prefix so downstream guards recognise them.
+- **Ingest parity:** channel-watcher hashes the raw url like the orchestrator (fixes a dedup miss + `undefined` crash on the 2nd video); `{channel_label}` caption variable is populated; local-clip imports no longer stall in preflight when AI cover is on.
+- **Misc:** speed-aware clip windowing (sped-up clips no longer overlap/run short), cover frame-extract threshold aligned to 20KB, `gpt-image-1` request body fixed (was HTTP 400), Set-2 retry scheduled in local time, `chrome_executable_path` override honoured, per-profile Chrome debug-port collision widened.
+
+### Changed — UI Thai localization + cleanup
+- Remaining English/Japanese UI labels translated to Thai across Settings, YouTube login, account, and AI-keys panels.
+- Removed the dead `src/components/ChannelWatcher.jsx` React component (the vanilla-JS overlay is the canonical Channel Watcher screen).
+
 ### Added — Per-account Thai proxy pool
 - New `proxyPool` service (`src/backend/services/proxyPool.js`) with `parse()`, `distribute()`, and `testProxy()` functions.
   - `parse()` accepts multi-line proxy text in host:port, host:port:user:pass, user:pass@host:port, and scheme://user:pass@host:port formats; deduplicates and reports invalid lines with reasons.

@@ -66,7 +66,7 @@ export default function ClipPreviewModal({
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
       if (data.caption) setCaption(data.caption);
-      showToast?.('สร้างแล้ว', 'AI ใช้ prompt ของเพจ', 'success');
+      showToast?.('สร้างแล้ว', 'AI ใช้พรอมต์ของเพจ', 'success');
     } catch (e) { showToast?.('ผิดพลาด', e.message, 'error'); }
     finally { setGenerating(false); }
   };
@@ -99,8 +99,8 @@ export default function ClipPreviewModal({
     setRendering(true);
     try {
       const body = selectedBanner === 'none'
-        ? { banner_preset_id: null }
-        : { banner_preset_id: Number(selectedBanner) };
+        ? { preset_id: null }
+        : { preset_id: Number(selectedBanner) };
       const res = await fetch(`${API}/api/clips/${clip.id}/re-render`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -108,7 +108,7 @@ export default function ClipPreviewModal({
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      showToast?.('กำลังสร้าง', 'คลิปใหม่กำลัง render — อาจใช้เวลาครู่หนึ่ง', 'info');
+      showToast?.('กำลังสร้าง', 'คลิปใหม่กำลังเรนเดอร์ — อาจใช้เวลาครู่หนึ่ง', 'info');
       onSaved?.();
     } catch (e) { showToast?.('ผิดพลาด', e.message, 'error'); }
     finally { setRendering(false); }
@@ -133,7 +133,7 @@ export default function ClipPreviewModal({
           </div>
           <div style={{ background: '#000', borderRadius: 4, overflow: 'hidden', aspectRatio: '9/16' }}>
             {videoSrc ? (
-              <video src={videoSrc} controls title={videoTitle || 'preview video'}
+              <video src={videoSrc} controls title={videoTitle || 'คลิปพรีวิว'}
                      style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -158,7 +158,7 @@ export default function ClipPreviewModal({
               {videoTitle}
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
-              EP {clip?.clip_index} · เพจ {pageName}
+              ตอน {clip?.clip_index} · เพจ {pageName}
             </div>
           </div>
 
@@ -209,7 +209,7 @@ export default function ClipPreviewModal({
                 <button className="btn-primary" disabled={generating}
                         style={{ width: '100%', marginTop: 6, fontSize: 12, padding: '6px' }}
                         onClick={regenerateAuto}>
-                  {generating ? 'กำลังสร้าง...' : '+ สร้างใหม่ด้วย prompt ของเพจ'}
+                  {generating ? 'กำลังสร้าง...' : '+ สร้างใหม่ด้วยพรอมต์ของเพจ'}
                 </button>
               </div>
             )}
@@ -268,7 +268,7 @@ export default function ClipPreviewModal({
               </button>
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
-              ต้องการแก้ภายในแบนเนอร์? ไปเมนู "แบนเนอร์" → แก้ preset → กลับมากดสร้างใหม่
+              ต้องการแก้ภายในแบนเนอร์? ไปเมนู "แบนเนอร์" → แก้ชุดแบนเนอร์ → กลับมากดสร้างใหม่
             </div>
           </div>
 
